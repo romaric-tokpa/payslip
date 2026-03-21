@@ -1,0 +1,4 @@
+export const PAYSLIP_AUDIT = {
+  UPLOADED: 'PAYSLIP_UPLOADED',
+  DELETED: 'PAYSLIP_DELETED',
+} as const;

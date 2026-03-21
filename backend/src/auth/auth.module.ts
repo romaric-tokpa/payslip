@@ -1,0 +1,45 @@
+import { Module, forwardRef } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import type { SignOptions } from 'jsonwebtoken';
+import { AuthService } from './auth.service';
+import { AuthController } from './auth.controller';
+import { JwtStrategy } from './jwt.strategy';
+import { PrismaModule } from '../prisma/prisma.module';
+import { UsersModule } from '../users/users.module';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
+
+@Module({
+  imports: [
+    PassportModule.register({ defaultStrategy: 'jwt' }),
+    PrismaModule,
+    forwardRef(() => UsersModule),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.getOrThrow<string>('JWT_SECRET'),
+        signOptions: {
+          expiresIn: config.get<string>(
+            'JWT_ACCESS_EXPIRES',
+            '15m',
+          ) as SignOptions['expiresIn'],
+        },
+      }),
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    JwtAuthGuard,
+    RolesGuard,
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    // Optionnel : ajouter `{ provide: APP_GUARD, useClass: RolesGuard }` pour appliquer `@Roles()` sans `@UseGuards(RolesGuard)`.
+  ],
+  exports: [AuthService, JwtModule, PassportModule, JwtAuthGuard, RolesGuard],
+})
+export class AuthModule {}

@@ -1,0 +1,4 @@
+export const USER_AUDIT = {
+  DEACTIVATED: 'USER_DEACTIVATED',
+  REACTIVATED: 'USER_REACTIVATED',
+} as const;

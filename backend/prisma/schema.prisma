@@ -1,0 +1,118 @@
+// PaySlip Manager — modèle de données (CDC §7)
+// https://www.prisma.io/docs
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  SUPER_ADMIN // plateforme
+  RH_ADMIN    // administrateur paie / RH (entreprise)
+  EMPLOYEE    // collaborateur
+}
+
+model Company {
+  id               String    @id @default(uuid())
+  name             String
+  siret            String?
+  address          String?
+  logoUrl          String?   @map("logo_url")
+  subscriptionPlan String?   @map("subscription_plan")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  users    User[]
+  payslips Payslip[]
+}
+
+model User {
+  id           String    @id @default(uuid())
+  companyId    String?   @map("company_id")
+  company      Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  firstName    String    @map("first_name")
+  lastName     String    @map("last_name")
+  email        String    @unique
+  employeeId   String?   @map("employee_id")
+  department   String?
+  position     String?
+  role         UserRole
+  passwordHash String    @map("password_hash")
+  isActive     Boolean   @default(true) @map("is_active")
+  entryDate    DateTime? @map("entry_date")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  payslips           Payslip[]      @relation("PayslipOwner")
+  uploadedPayslips   Payslip[]      @relation("PayslipUploader")
+  auditLogs          AuditLog[]
+  notifications      Notification[]
+  sessions           Session[]
+
+  @@unique([companyId, employeeId], name: "user_company_matricule")
+  @@index([companyId])
+}
+
+model Payslip {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  user         User     @relation("PayslipOwner", fields: [userId], references: [id], onDelete: Cascade)
+  companyId    String   @map("company_id")
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  periodMonth  Int      @map("period_month")
+  periodYear   Int      @map("period_year")
+  fileUrl      String   @map("file_url")
+  fileSize     Int      @map("file_size")
+  uploadedById String   @map("uploaded_by")
+  uploadedBy   User     @relation("PayslipUploader", fields: [uploadedById], references: [id])
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+  isRead       Boolean  @default(false) @map("is_read")
+  readAt       DateTime? @map("read_at")
+
+  @@unique([userId, periodMonth, periodYear], name: "payslip_user_period")
+  @@index([companyId, periodYear, periodMonth])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId, isRead])
+}
+
+model Session {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @map("token_hash")
+  deviceInfo String?  @map("device_info")
+  ipAddress  String?  @map("ip_address")
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([expiresAt])
+}

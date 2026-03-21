@@ -1,0 +1,33 @@
+.employee-row-inactive td {
+  background-color: #f5f5f5 !important;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.employees-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.employees-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.employees-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.employees-filters .ant-input-search {
+  flex: 1;
+  min-width: 240px;
+  max-width: 420px;
+}
