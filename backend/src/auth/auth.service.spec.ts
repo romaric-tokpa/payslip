@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -8,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { User } from '@prisma/client';
+import { OrganizationService } from '../organization/organization.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import type { RequestUser } from './auth.types';
@@ -37,9 +39,10 @@ describe('AuthService', () => {
       delete: jest.Mock;
       deleteMany: jest.Mock;
     };
-    user: { update: jest.Mock };
+    user: { update: jest.Mock; findUnique: jest.Mock };
   };
   let users: { findByEmail: jest.Mock; emailTaken: jest.Mock };
+  let organization: { assertOrgAssignment: jest.Mock };
   let jwt: { signAsync: jest.Mock };
 
   const pepper = 'refresh-pepper';
@@ -71,16 +74,23 @@ describe('AuthService', () => {
       },
       session: {
         create: jest.fn().mockResolvedValue({}),
-        findFirst: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
         delete: jest.fn().mockResolvedValue({}),
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
-      user: { update: jest.fn().mockResolvedValue({}) },
+      user: {
+        update: jest.fn().mockResolvedValue({}),
+        findUnique: jest.fn(),
+      },
     };
 
     users = {
       findByEmail: jest.fn(),
       emailTaken: jest.fn(),
+    };
+
+    organization = {
+      assertOrgAssignment: jest.fn().mockResolvedValue(undefined),
     };
 
     jwt = {
@@ -92,6 +102,7 @@ describe('AuthService', () => {
         AuthService,
         { provide: PrismaService, useValue: prisma },
         { provide: UsersService, useValue: users },
+        { provide: OrganizationService, useValue: organization },
         { provide: JwtService, useValue: jwt },
         {
           provide: ConfigService,
@@ -143,7 +154,7 @@ describe('AuthService', () => {
         firstName: 'Awa',
         lastName: 'Diallo',
         companyName: 'Ma boîte',
-        companySiret: '123',
+        companyRccm: 'CI-ABJ-2018-B-12345',
       };
 
       const result = await service.register(dto);
@@ -246,31 +257,67 @@ describe('AuthService', () => {
       const refreshPlain = 'opaque-refresh-token';
       const tokenHash = hashRefreshToken(refreshPlain, pepper);
       const u = baseUser();
-      prisma.session.findFirst.mockResolvedValue({
+      const sessionRow = {
         id: 'sess-1',
         userId: u.id,
         tokenHash,
         deviceInfo: null,
         expiresAt: new Date(Date.now() + 86400000),
         user: u,
+      };
+      prisma.$transaction.mockImplementation(async (fn) => {
+        return fn({
+          session: {
+            findFirst: jest.fn().mockResolvedValue(sessionRow),
+            deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+          },
+        } as never);
       });
 
       const out = await service.refreshTokens(refreshPlain);
 
       expect(out.accessToken).toBe('signed.jwt.access');
       expect(out.refreshToken).toBeDefined();
-      expect(prisma.session.delete).toHaveBeenCalledWith({
-        where: { id: 'sess-1' },
-      });
       expect(prisma.session.create).toHaveBeenCalled();
     });
 
     it('rejette si refresh inconnu ou expiré', async () => {
-      prisma.session.findFirst.mockResolvedValue(null);
+      prisma.$transaction.mockImplementation(async (fn) => {
+        return fn({
+          session: {
+            findFirst: jest.fn().mockResolvedValue(null),
+            deleteMany: jest.fn(),
+          },
+        } as never);
+      });
       await expect(service.refreshTokens('bad')).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
-      expect(prisma.session.delete).not.toHaveBeenCalled();
+    });
+
+    it('rejette si le jeton a déjà été consommé (course / double refresh)', async () => {
+      const refreshPlain = 'opaque-refresh-token';
+      const tokenHash = hashRefreshToken(refreshPlain, pepper);
+      const u = baseUser();
+      const sessionRow = {
+        id: 'sess-1',
+        userId: u.id,
+        tokenHash,
+        deviceInfo: null,
+        expiresAt: new Date(Date.now() + 86400000),
+        user: u,
+      };
+      prisma.$transaction.mockImplementation(async (fn) => {
+        return fn({
+          session: {
+            findFirst: jest.fn().mockResolvedValue(sessionRow),
+            deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+          },
+        } as never);
+      });
+      await expect(service.refreshTokens(refreshPlain)).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
     });
   });
 
@@ -299,6 +346,7 @@ describe('AuthService', () => {
 
     it('crée employé inactif + session INVITATION 72h', async () => {
       users.emailTaken.mockResolvedValue(false);
+      prisma.session.findFirst.mockResolvedValue(null);
       const createdEmp: User = {
         id: 'emp-new',
         companyId: 'co-1',
@@ -327,13 +375,11 @@ describe('AuthService', () => {
 
       const out = await service.inviteEmployee(inviteDto, inviterRh);
 
-      expect(out.invitationToken).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-      );
-      expect(out.invitationUrl).toBe(`/activate?token=${out.invitationToken}`);
+      expect(out.activationCode).toMatch(/^\d{6}$/);
+      expect(out.activationUrl).toBe(`/activate?code=${out.activationCode}`);
       const expectedHash = hashOpaqueToken(
         SESSION_DEVICE.INVITATION,
-        out.invitationToken,
+        out.activationCode,
         pepper,
       );
       expect(userCreate).toHaveBeenCalled();
@@ -363,8 +409,93 @@ describe('AuthService', () => {
     });
   });
 
+  describe('regenerateEmployeeInvitation', () => {
+    const inviterRh: RequestUser = {
+      id: 'rh-1',
+      email: 'rh@b.com',
+      role: 'RH_ADMIN',
+      companyId: 'co-1',
+    };
+    const inactiveEmp: User = {
+      id: 'emp-1',
+      companyId: 'co-1',
+      email: 'nouveau@corp.com',
+      firstName: 'F',
+      lastName: 'L',
+      role: 'EMPLOYEE',
+      passwordHash: 'h',
+      isActive: false,
+      employeeId: 'E1',
+      department: null,
+      position: null,
+      entryDate: null,
+      createdAt: new Date(),
+    };
+
+    it('émet un nouveau code et remplace les sessions INVITATION', async () => {
+      prisma.user.findUnique.mockResolvedValue(inactiveEmp);
+      prisma.session.findFirst.mockResolvedValue(null);
+      const deleteMany = jest.fn().mockResolvedValue({ count: 1 });
+      const sessionCreate = jest.fn().mockResolvedValue({});
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: never) => Promise<unknown>) => {
+          return fn({
+            session: { deleteMany, create: sessionCreate },
+          } as never);
+        },
+      );
+
+      const out = await service.regenerateEmployeeInvitation(
+        inactiveEmp.id,
+        inviterRh,
+      );
+
+      expect(out.activationCode).toMatch(/^\d{6}$/);
+      expect(out.activationUrl).toBe(`/activate?code=${out.activationCode}`);
+      expect(deleteMany).toHaveBeenCalledWith({
+        where: {
+          userId: inactiveEmp.id,
+          deviceInfo: SESSION_DEVICE.INVITATION,
+        },
+      });
+      const expectedHash = hashOpaqueToken(
+        SESSION_DEVICE.INVITATION,
+        out.activationCode,
+        pepper,
+      );
+      expect(sessionCreate).toHaveBeenCalled();
+      const sc = sessionCreate as unknown as { mock: { calls: unknown[][] } };
+      const arg = sc.mock.calls[0][0] as {
+        data: { tokenHash: string; deviceInfo: string };
+      };
+      expect(arg.data.tokenHash).toBe(expectedHash);
+      expect(arg.data.deviceInfo).toBe(SESSION_DEVICE.INVITATION);
+    });
+
+    it('rejette si compte déjà actif', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...inactiveEmp,
+        isActive: true,
+      });
+      await expect(
+        service.regenerateEmployeeInvitation(inactiveEmp.id, inviterRh),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('rejette si autre entreprise', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...inactiveEmp,
+        companyId: 'co-2',
+      });
+      await expect(
+        service.regenerateEmployeeInvitation(inactiveEmp.id, inviterRh),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+  });
+
   describe('activateInvitation', () => {
-    const token = '550e8400-e29b-41d4-a716-446655440000';
+    const code = '482913';
     const emp: User = {
       id: 'emp-1',
       companyId: 'co-1',
@@ -382,7 +513,7 @@ describe('AuthService', () => {
     };
 
     it('active le compte et retourne les tokens', async () => {
-      const th = hashOpaqueToken(SESSION_DEVICE.INVITATION, token, pepper);
+      const th = hashOpaqueToken(SESSION_DEVICE.INVITATION, code, pepper);
       prisma.session.findFirst.mockResolvedValue({
         id: 's-inv',
         userId: emp.id,
@@ -408,7 +539,7 @@ describe('AuthService', () => {
       );
 
       const out = await service.activateInvitation({
-        invitationToken: token,
+        activationCode: code,
         newPassword: 'password12',
       });
 
@@ -418,11 +549,53 @@ describe('AuthService', () => {
       expect(prisma.session.create).toHaveBeenCalled();
     });
 
-    it('rejette si jeton invalide', async () => {
+    it('normalise un code saisi avec moins de 6 chiffres (zéros à gauche)', async () => {
+      const short = '2913';
+      const normalized = '002913';
+      const th = hashOpaqueToken(SESSION_DEVICE.INVITATION, normalized, pepper);
+      prisma.session.findFirst.mockResolvedValue({
+        id: 's-inv',
+        userId: emp.id,
+        tokenHash: th,
+        deviceInfo: SESSION_DEVICE.INVITATION,
+        expiresAt: new Date(Date.now() + 3600000),
+        user: emp,
+      });
+      prisma.$transaction.mockImplementation(
+        async (fn: (tx: never) => Promise<User>) => {
+          const tx = {
+            session: { delete: jest.fn().mockResolvedValue({}) },
+            user: {
+              update: jest.fn().mockResolvedValue({
+                ...emp,
+                isActive: true,
+                passwordHash: 'hashed-password',
+              }),
+            },
+          };
+          return fn(tx as never);
+        },
+      );
+
+      await service.activateInvitation({
+        activationCode: short,
+        newPassword: 'password12',
+      });
+
+      expect(prisma.session.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tokenHash: th,
+          }),
+        }),
+      );
+    });
+
+    it('rejette si code invalide', async () => {
       prisma.session.findFirst.mockResolvedValue(null);
       await expect(
         service.activateInvitation({
-          invitationToken: token,
+          activationCode: code,
           newPassword: 'password12',
         }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
@@ -432,7 +605,7 @@ describe('AuthService', () => {
       prisma.session.findFirst.mockResolvedValue(null);
       await expect(
         service.activateInvitation({
-          invitationToken: token,
+          activationCode: code,
           newPassword: 'password12',
         }),
       ).rejects.toBeInstanceOf(UnauthorizedException);
@@ -517,6 +690,51 @@ describe('AuthService', () => {
       });
       expect(msg.message).toContain('Mot de passe');
       expect(prisma.$transaction).toHaveBeenCalled();
+    });
+  });
+
+  describe('changePassword', () => {
+    const actor: RequestUser = {
+      id: 'user-1',
+      email: 'x@y.com',
+      role: 'RH_ADMIN',
+      companyId: 'co-1',
+    };
+
+    it('refuse si mot de passe actuel incorrect', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        passwordHash: 'hash',
+        isActive: true,
+      });
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(
+        service.changePassword(actor, 'wrong', 'newpass123'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('succès : mise à jour + audit PASSWORD_CHANGED', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        passwordHash: 'hash',
+        isActive: true,
+      });
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+
+      const msg = await service.changePassword(
+        actor,
+        'good',
+        'newpass123',
+      );
+      expect(msg.message).toContain('mis à jour');
+      expect(prisma.user.update).toHaveBeenCalled();
+      expect(prisma.auditLog.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ action: 'PASSWORD_CHANGED' }),
+        }),
+      );
     });
   });
 });

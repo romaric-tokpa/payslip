@@ -1,5 +1,5 @@
 import { InboxOutlined } from '@ant-design/icons'
-import { Button, Form, Select, Spin, Upload, message } from 'antd'
+import { App, Button, Form, Select, Spin, Upload } from 'antd'
 import type { UploadFile } from 'antd/es/upload/interface'
 import { useCallback, useEffect, useState } from 'react'
 import * as employeesApi from '../../services/employees.service'
@@ -20,6 +20,7 @@ type SingleFormValues = {
 }
 
 export function SingleUploadTab() {
+  const { message } = App.useApp()
   const [form] = Form.useForm<SingleFormValues>()
   const [fileList, setFileList] = useState<UploadFile[]>([])
   const [uploading, setUploading] = useState(false)
@@ -57,7 +58,7 @@ export function SingleUploadTab() {
     } finally {
       setOptionsLoading(false)
     }
-  }, [])
+  }, [message])
 
   useEffect(() => {
     void loadOptions(debouncedSearch)

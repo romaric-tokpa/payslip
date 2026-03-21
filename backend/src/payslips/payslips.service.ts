@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { RequestUser } from '../auth/auth.types';
@@ -15,6 +16,7 @@ import { StorageService } from '../storage/storage.service';
 import { UsersService } from '../users/users.service';
 import { PAYSLIP_AUDIT } from './payslips.constants';
 import { QueryPayslipsDto } from './dto/query-payslips.dto';
+import { isLikelyPdfUpload } from './payslip-pdf.util';
 
 /** MATRICULE_MM_AAAA.pdf (underscores entre segments). */
 const BULK_FILENAME_SEP = /^(.*)_(\d{2})_(\d{4})\.pdf$/i;
@@ -50,6 +52,13 @@ const userListSelect = {
   lastName: true,
   employeeId: true,
   department: true,
+  orgDepartment: {
+    select: {
+      name: true,
+      direction: { select: { name: true } },
+    },
+  },
+  orgService: { select: { name: true } },
 } as const;
 
 export type PayslipWithUserList = Prisma.PayslipGetPayload<{
@@ -102,7 +111,7 @@ export class PayslipsService {
   ): Promise<PayslipWithUserList> {
     this.assertRhAdminWithCompany(adminUser);
 
-    if (file.mimetype !== 'application/pdf') {
+    if (!isLikelyPdfUpload(file)) {
       throw new BadRequestException('Seuls les fichiers PDF sont acceptés');
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -134,7 +143,15 @@ export class PayslipsService {
       periodYear,
       periodMonth,
     );
-    await this.storage.uploadFile(file.buffer, key, 'application/pdf');
+    try {
+      await this.storage.uploadFile(file.buffer, key, 'application/pdf');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Échec upload stockage S3: ${msg}`);
+      throw new ServiceUnavailableException(
+        `Stockage S3/MinIO indisponible : ${msg}. Vérifiez que MinIO tourne (docker compose up -d minio), les variables S3_* dans backend/.env, et le bucket (ou ajoutez S3_ENSURE_BUCKET=true pour le créer au démarrage).`,
+      );
+    }
 
     let created: PayslipWithUserList;
     try {
@@ -206,7 +223,7 @@ export class PayslipsService {
     for (const file of list) {
       const filename = file.originalname || '';
 
-      if (file.mimetype !== 'application/pdf') {
+      if (!isLikelyPdfUpload(file)) {
         failed += 1;
         details.push({
           filename,
@@ -369,6 +386,7 @@ export class PayslipsService {
   async markAsRead(
     id: string,
     actor: RequestUser,
+    client?: { ipAddress: string | null; userAgent: string | null },
   ): Promise<PayslipWithUserList> {
     if (actor.role !== 'EMPLOYEE') {
       throw new ForbiddenException();
@@ -383,11 +401,35 @@ export class PayslipsService {
     if (payslip.userId !== actor.id) {
       throw new ForbiddenException();
     }
-    return this.prisma.payslip.update({
+
+    const wasUnread = !payslip.isRead;
+    const readAt = new Date();
+
+    const updated = await this.prisma.payslip.update({
       where: { id },
-      data: { isRead: true, readAt: new Date() },
+      data: { isRead: true, readAt },
       include: { user: { select: { ...userListSelect } } },
     });
+
+    if (wasUnread) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: actor.id,
+          action: PAYSLIP_AUDIT.READ,
+          entityType: 'Payslip',
+          entityId: id,
+          ipAddress: client?.ipAddress ?? undefined,
+          userAgent: client?.userAgent ?? undefined,
+          metadata: {
+            periodMonth: payslip.periodMonth,
+            periodYear: payslip.periodYear,
+            readAt: readAt.toISOString(),
+          } as Prisma.InputJsonValue,
+        },
+      });
+    }
+
+    return updated;
   }
 
   async remove(id: string, actor: RequestUser): Promise<void> {

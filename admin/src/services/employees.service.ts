@@ -18,6 +18,12 @@ function toQuery(params: GetEmployeesParams): Record<string, string | number> {
   if (params.department != null && params.department !== '') {
     q.department = params.department
   }
+  if (params.departmentId != null && params.departmentId !== '') {
+    q.departmentId = params.departmentId
+  }
+  if (params.directionId != null && params.directionId !== '') {
+    q.directionId = params.directionId
+  }
   return q
 }
 
@@ -30,10 +36,25 @@ export async function getEmployees(
   return data
 }
 
+export async function getEmployeeById(id: string): Promise<EmployeeUser> {
+  const { data } = await api.get<EmployeeUser>(`/users/${id}`)
+  return data
+}
+
 export async function createEmployee(
   body: CreateEmployeePayload,
 ): Promise<InviteEmployeeResponse> {
   const { data } = await api.post<InviteEmployeeResponse>('/users', body)
+  return data
+}
+
+/** Nouveau code d’activation (72 h) ; les codes précédents sont invalidés. */
+export async function regenerateEmployeeInvitation(
+  userId: string,
+): Promise<InviteEmployeeResponse> {
+  const { data } = await api.post<InviteEmployeeResponse>(
+    `/users/${encodeURIComponent(userId)}/invitation`,
+  )
   return data
 }
 

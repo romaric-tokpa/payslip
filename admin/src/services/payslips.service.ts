@@ -4,6 +4,7 @@ import type {
   BulkUploadReport,
   PaginatedPayslipsResponse,
   Payslip,
+  PayslipDetail,
   QueryPayslipsParams,
 } from '../types/payslips'
 
@@ -71,6 +72,11 @@ export async function getPayslips(
   const { data } = await api.get<PaginatedPayslipsResponse>('/payslips', {
     params: payslipQueryToParams(params),
   })
+  return data
+}
+
+export async function getPayslipById(id: string): Promise<PayslipDetail> {
+  const { data } = await api.get<PayslipDetail>(`/payslips/${id}`)
   return data
 }
 

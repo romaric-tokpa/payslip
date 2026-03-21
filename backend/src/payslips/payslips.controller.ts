@@ -10,6 +10,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   Res,
   UploadedFile,
   UploadedFiles,
@@ -17,7 +18,8 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
+import { getRequestClientMeta } from '../common/utils/request-client.util';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -206,8 +208,9 @@ export class PayslipsController {
   async markAsRead(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() actor: RequestUser,
+    @Req() req: Request,
   ) {
-    return this.payslips.markAsRead(id, actor);
+    return this.payslips.markAsRead(id, actor, getRequestClientMeta(req));
   }
 
   @Delete(':id')

@@ -1,5 +1,6 @@
 import { InboxOutlined } from '@ant-design/icons'
 import {
+  App,
   Button,
   Progress,
   Result,
@@ -7,7 +8,6 @@ import {
   Table,
   Typography,
   Upload,
-  message,
 } from 'antd'
 import type { UploadFile } from 'antd/es/upload/interface'
 import { useCallback, useRef, useState } from 'react'
@@ -154,6 +154,7 @@ function applyResolution(
 }
 
 export function BulkUploadTab() {
+  const { message } = App.useApp()
   const [uploadKey, setUploadKey] = useState(0)
   const [fileList, setFileList] = useState<UploadFile[]>([])
   const [rows, setRows] = useState<BulkPreviewRow[]>([])
@@ -199,7 +200,7 @@ export function BulkUploadTab() {
         setResolving(false)
       }
     }
-  }, [])
+  }, [message])
 
   function handleUploadChange(info: { fileList: UploadFile[] }) {
     resolveGenRef.current += 1
@@ -265,7 +266,7 @@ export function BulkUploadTab() {
     report?.details.filter((d) => d.status === 'ERROR') ?? []
 
   return (
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+    <Space orientation="vertical" size="large" style={{ width: '100%' }}>
       <Upload.Dragger
         key={uploadKey}
         multiple
@@ -323,7 +324,7 @@ export function BulkUploadTab() {
           status={report.failed > 0 ? 'warning' : 'success'}
           title="Résultat du téléversement"
           subTitle={
-            <Space direction="vertical">
+            <Space orientation="vertical">
               <Text>
                 <Text strong style={{ color: '#52c41a' }}>
                   {report.success}

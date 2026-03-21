@@ -32,9 +32,12 @@ export class RegisterDto {
   @MaxLength(255)
   companyName: string;
 
-  @ApiPropertyOptional({ example: '123 456 789 00012' })
+  @ApiPropertyOptional({
+    description: 'Numéro RCCM (registre du commerce, Côte d’Ivoire)',
+    example: 'CI-ABJ-2018-B-12345',
+  })
   @IsOptional()
   @IsString()
-  @MaxLength(32)
-  companySiret?: string;
+  @MaxLength(64)
+  companyRccm?: string;
 }

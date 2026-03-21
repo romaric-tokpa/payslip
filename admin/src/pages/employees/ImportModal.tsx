@@ -1,5 +1,6 @@
 import { InboxOutlined } from '@ant-design/icons'
 import {
+  App,
   Button,
   Modal,
   Result,
@@ -7,7 +8,6 @@ import {
   Table,
   Typography,
   Upload,
-  message,
 } from 'antd'
 import type { UploadFile } from 'antd/es/upload/interface'
 import { useState } from 'react'
@@ -25,6 +25,7 @@ type ImportModalProps = {
 }
 
 export function ImportModal({ open, onClose, onImportSuccess }: ImportModalProps) {
+  const { message } = App.useApp()
   const [fileList, setFileList] = useState<UploadFile[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [report, setReport] = useState<ImportEmployeesReport | null>(null)
@@ -128,7 +129,7 @@ export function ImportModal({ open, onClose, onImportSuccess }: ImportModalProps
           status={report.errors > 0 ? 'warning' : 'success'}
           title="Rapport d'import"
           subTitle={
-            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="small" style={{ width: '100%' }}>
               <Text>
                 <Text strong style={{ color: '#52c41a' }}>
                   {report.created}

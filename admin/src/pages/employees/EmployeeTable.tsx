@@ -20,6 +20,7 @@ type EmployeeTableProps = {
   onDeactivate: (row: EmployeeUser) => void
   onReactivate: (row: EmployeeUser) => void
   onViewPayslips: (userId: string) => void
+  onRegenerateInvitation: (row: EmployeeUser) => void
 }
 
 export function EmployeeTable({
@@ -31,6 +32,7 @@ export function EmployeeTable({
   onDeactivate,
   onReactivate,
   onViewPayslips,
+  onRegenerateInvitation,
 }: EmployeeTableProps) {
   const columns: ColumnsType<EmployeeUser> = [
     {
@@ -54,10 +56,23 @@ export function EmployeeTable({
       ellipsis: true,
     },
     {
+      title: 'Direction',
+      key: 'direction',
+      width: 140,
+      ellipsis: true,
+      render: (_: unknown, row) =>
+        row.orgDepartment?.direction?.name ?? '—',
+    },
+    {
       title: 'Département',
-      dataIndex: 'department',
       key: 'department',
-      render: (v: string | null) => v ?? '—',
+      render: (_: unknown, row) =>
+        row.orgDepartment?.name ?? row.department ?? '—',
+    },
+    {
+      title: 'Service',
+      key: 'service',
+      render: (_: unknown, row) => row.orgService?.name ?? '—',
     },
     {
       title: 'Poste',
@@ -88,6 +103,14 @@ export function EmployeeTable({
           row.isActive
             ? { key: 'deactivate', label: 'Désactiver', danger: true }
             : { key: 'reactivate', label: 'Réactiver' },
+          ...(!row.isActive && row.role === 'EMPLOYEE'
+            ? [
+                {
+                  key: 'invitation',
+                  label: 'Code d’activation (nouveau)',
+                } as const,
+              ]
+            : []),
           { key: 'payslips', label: 'Voir les bulletins', icon: <FileProtectOutlined /> },
         ]
 
@@ -96,6 +119,7 @@ export function EmployeeTable({
           if (key === 'edit') onEdit(row)
           else if (key === 'deactivate') onDeactivate(row)
           else if (key === 'reactivate') onReactivate(row)
+          else if (key === 'invitation') onRegenerateInvitation(row)
           else if (key === 'payslips') onViewPayslips(row.id)
         }
 
@@ -123,7 +147,7 @@ export function EmployeeTable({
       rowClassName={(record) =>
         record.isActive ? '' : 'employee-row-inactive'
       }
-      scroll={{ x: 960 }}
+      scroll={{ x: 1220 }}
     />
   )
 }

@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
+  HttpException,
   HttpStatus,
   Post,
   UseGuards,
@@ -27,6 +29,7 @@ import { Roles } from './decorators/roles.decorator';
 import { RolesGuard } from './guards/roles.guard';
 import {
   ActivateInvitationDto,
+  ChangePasswordDto,
   ForgotPasswordDto,
   InviteEmployeeDto,
   LoginDto,
@@ -39,6 +42,35 @@ import {
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
+
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Throttle(10, 60)
+  @ApiOperation({
+    summary: 'Changer le mot de passe (utilisateur connecté)',
+    description:
+      'Vérifie le mot de passe actuel puis en enregistre un nouveau (min. 8 caractères).',
+  })
+  @ApiOkResponse({
+    description: 'Succès',
+    schema: { example: { message: 'Mot de passe mis à jour.' } },
+  })
+  @ApiUnauthorizedResponse({
+    description: 'JWT invalide ou mot de passe actuel incorrect',
+  })
+  @ApiBadRequestResponse({ description: 'Validation' })
+  async changePassword(
+    @Body() dto: ChangePasswordDto,
+    @CurrentUser() actor: RequestUser,
+  ) {
+    return this.auth.changePassword(
+      actor,
+      dto.currentPassword,
+      dto.newPassword,
+    );
+  }
 
   @Public()
   @Post('register')
@@ -76,14 +108,14 @@ export class AuthController {
   @ApiOperation({
     summary: 'Inviter un collaborateur (compte inactif jusqu’à activation)',
     description:
-      'Crée un employé `EMPLOYEE` avec mot de passe temporaire et un jeton d’invitation (72 h) en `Session`.',
+      'Crée un employé `EMPLOYEE` avec mot de passe temporaire et un code d’activation à 6 chiffres (72 h) en `Session`.',
   })
   @ApiCreatedResponse({
-    description: 'Jeton d’invitation émis (envoi e-mail à brancher plus tard)',
+    description: 'Code d’activation émis (envoi e-mail à brancher plus tard)',
     schema: {
       example: {
-        invitationToken: '550e8400-e29b-41d4-a716-446655440000',
-        invitationUrl: '/activate?token=550e8400-e29b-41d4-a716-446655440000',
+        activationCode: '482913',
+        activationUrl: '/activate?code=482913',
       },
     },
   })
@@ -104,7 +136,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Activer le compte collaborateur (première connexion)',
     description:
-      'Consomme le jeton d’invitation et définit le mot de passe définitif.',
+      'Consomme le code d’activation et définit le mot de passe définitif.',
   })
   @ApiOkResponse({
     description: 'Compte activé, session ouverte',
@@ -124,7 +156,7 @@ export class AuthController {
     },
   })
   @ApiUnauthorizedResponse({
-    description: 'Jeton d’invitation invalide ou expiré',
+    description: 'Code d’activation invalide ou expiré',
   })
   @ApiBadRequestResponse({
     description: 'Validation (ex. mot de passe < 8 caractères)',
@@ -207,6 +239,25 @@ export class AuthController {
   @ApiBadRequestResponse({ description: 'Validation' })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.auth.resetPassword(dto);
+  }
+
+  /**
+   * Les navigateurs / certains proxies envoient parfois un GET (ex. après redirection).
+   * La route utile est POST avec corps JSON { refreshToken }.
+   */
+  @Public()
+  @Get('refresh')
+  refreshGetNotAllowed(): never {
+    throw new HttpException(
+      {
+        message:
+          'Utilisez POST /api/v1/auth/refresh avec un corps JSON { "refreshToken": "…" }. Les requêtes GET ne sont pas prises en charge.',
+        error: 'Method Not Allowed',
+        statusCode: HttpStatus.METHOD_NOT_ALLOWED,
+        allow: 'POST',
+      },
+      HttpStatus.METHOD_NOT_ALLOWED,
+    );
   }
 
   @Public()

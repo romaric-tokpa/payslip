@@ -4,7 +4,7 @@ import {
   TeamOutlined,
   WarningOutlined,
 } from '@ant-design/icons'
-import { Button, Spin, Table, Tag, Typography, message } from 'antd'
+import { App, Button, Spin, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
@@ -112,6 +112,7 @@ function UploadsTooltip({ active, payload }: UploadsTooltipProps) {
 }
 
 export function DashboardPage() {
+  const { message } = App.useApp()
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState<DashboardStats | null>(null)
 
@@ -141,7 +142,7 @@ export function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [message])
 
   const chartData: ChartRow[] =
     stats?.monthlyUploads.map((u) => ({

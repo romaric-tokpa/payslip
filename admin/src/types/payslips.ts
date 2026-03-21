@@ -20,6 +20,9 @@ export type Payslip = {
   user: PayslipUserSummary
 }
 
+/** Réponse de GET /payslips/:id (URL signée pour ouvrir le PDF). */
+export type PayslipDetail = Payslip & { presignedUrl: string }
+
 export type PayslipsListMeta = {
   total: number
   page: number

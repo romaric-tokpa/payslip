@@ -18,14 +18,66 @@ enum UserRole {
 model Company {
   id               String    @id @default(uuid())
   name             String
-  siret            String?
+  /// RCCM (Côte d’Ivoire) ; colonne SQL `siret` (historique).
+  rccm             String?   @map("siret")
   address          String?
   logoUrl          String?   @map("logo_url")
   subscriptionPlan String?   @map("subscription_plan")
   createdAt        DateTime  @default(now()) @map("created_at")
 
-  users    User[]
-  payslips Payslip[]
+  users       User[]
+  payslips    Payslip[]
+  directions  Direction[]
+  departments Department[]
+  services    Service[]
+}
+
+model Direction {
+  id        String   @id @default(uuid())
+  companyId String   @map("company_id")
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  departments Department[]
+
+  @@unique([companyId, name], name: "direction_company_name")
+  @@index([companyId])
+}
+
+model Department {
+  id        String   @id @default(uuid())
+  companyId String   @map("company_id")
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  directionId String?   @map("direction_id")
+  direction   Direction? @relation(fields: [directionId], references: [id], onDelete: SetNull)
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  services Service[]
+  users    User[]    @relation("UserOrgDepartment")
+
+  @@unique([companyId, name], name: "department_company_name")
+  @@index([companyId])
+  @@index([directionId])
+}
+
+model Service {
+  id           String      @id @default(uuid())
+  companyId    String      @map("company_id")
+  company      Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  departmentId String?     @map("department_id")
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  name         String
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  users User[] @relation("UserOrgService")
+
+  @@index([companyId])
+  @@index([departmentId])
 }
 
 model User {
@@ -36,8 +88,13 @@ model User {
   lastName     String    @map("last_name")
   email        String    @unique
   employeeId   String?   @map("employee_id")
+  /// Libellé libre historique (import CSV) ; préférer departmentId pour la structure.
   department   String?
   position     String?
+  departmentId String?   @map("department_id")
+  orgDepartment Department? @relation("UserOrgDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
+  serviceId    String?   @map("service_id")
+  orgService   Service?    @relation("UserOrgService", fields: [serviceId], references: [id], onDelete: SetNull)
   role         UserRole
   passwordHash String    @map("password_hash")
   isActive     Boolean   @default(true) @map("is_active")
@@ -52,6 +109,8 @@ model User {
 
   @@unique([companyId, employeeId], name: "user_company_matricule")
   @@index([companyId])
+  @@index([departmentId])
+  @@index([serviceId])
 }
 
 model Payslip {

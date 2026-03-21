@@ -37,6 +37,11 @@ const userSummary = {
   lastName: 'Dupont',
   employeeId: 'E1',
   department: 'RH',
+  orgDepartment: null as {
+    name: string;
+    direction: { name: string } | null;
+  } | null,
+  orgService: null as { name: string } | null,
 };
 
 describe('PayslipsService', () => {
@@ -398,13 +403,55 @@ describe('PayslipsService', () => {
         readAt: new Date(),
       });
 
-      await service.markAsRead('p1', employee);
+      await service.markAsRead('p1', employee, {
+        ipAddress: '203.0.113.1',
+        userAgent: 'PaySlipApp/1',
+      });
       expect(prisma.payslip.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'p1' },
           data: expect.objectContaining({ isRead: true }),
         }),
       );
+      expect(prisma.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: employee.id,
+          action: PAYSLIP_AUDIT.READ,
+          entityType: 'Payslip',
+          entityId: 'p1',
+          ipAddress: '203.0.113.1',
+          userAgent: 'PaySlipApp/1',
+          metadata: expect.objectContaining({
+            periodMonth: 1,
+            periodYear: 2024,
+          }),
+        }),
+      });
+    });
+
+    it('déjà lu : pas de nouvelle entrée d’audit', async () => {
+      const slip = {
+        id: 'p1',
+        userId: employee.id,
+        companyId: 'co-1',
+        periodMonth: 1,
+        periodYear: 2024,
+        fileUrl: 'k',
+        fileSize: 1,
+        uploadedById: rh.id,
+        uploadedAt: new Date(),
+        isRead: true,
+        readAt: new Date('2024-01-10'),
+        user: { ...userSummary },
+      };
+      prisma.payslip.findUnique.mockResolvedValue(slip);
+      prisma.payslip.update.mockResolvedValue({
+        ...slip,
+        readAt: new Date(),
+      });
+
+      await service.markAsRead('p1', employee);
+      expect(prisma.auditLog.create).not.toHaveBeenCalled();
     });
   });
 

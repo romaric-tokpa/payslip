@@ -83,20 +83,51 @@ export class UsersController {
     return this.users.findAllPaginated(actor, query);
   }
 
+  @Get('me')
+  @ApiOperation({
+    summary: 'Profil de l’utilisateur connecté',
+    description:
+      'Retourne les données publiques du compte et, si applicable, l’entreprise liée.',
+  })
+  @ApiOkResponse({ description: 'Utilisateur + entreprise' })
+  @ApiUnauthorizedResponse()
+  @ApiNotFoundResponse()
+  async getMe(@CurrentUser() actor: RequestUser) {
+    return this.users.getMe(actor);
+  }
+
+  @Patch('me')
+  @ApiOperation({
+    summary: 'Mettre à jour le profil connecté',
+    description:
+      'Prénom, nom, e-mail, département et poste. L’e-mail doit rester unique sur la plateforme.',
+  })
+  @ApiOkResponse({ description: 'Profil mis à jour (utilisateur + entreprise)' })
+  @ApiUnauthorizedResponse()
+  @ApiNotFoundResponse()
+  @ApiConflictResponse({ description: 'E-mail déjà utilisé' })
+  @ApiBadRequestResponse({ description: 'Validation des champs' })
+  async updateMe(
+    @CurrentUser() actor: RequestUser,
+    @Body() dto: UpdateUserDto,
+  ) {
+    return this.users.updateMe(actor, dto);
+  }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @Roles('RH_ADMIN')
   @ApiOperation({
-    summary: 'Créer un collaborateur (invitation)',
+    summary: 'Créer un collaborateur (code d’activation)',
     description:
-      'Crée un compte EMPLOYEE inactif et un jeton d’invitation (72 h), comme POST /auth/invite.',
+      'Crée un compte EMPLOYEE inactif et un code d’activation à 6 chiffres (72 h), comme POST /auth/invite.',
   })
   @ApiCreatedResponse({
-    description: 'Jeton d’invitation',
+    description: 'Code d’activation (6 chiffres)',
     schema: {
       example: {
-        invitationToken: 'uuid',
-        invitationUrl: '/activate?token=uuid',
+        activationCode: '482913',
+        activationUrl: '/activate?code=482913',
       },
     },
   })
@@ -192,6 +223,37 @@ export class UsersController {
   @ApiUnauthorizedResponse()
   async findOne(@Param('id') id: string, @CurrentUser() actor: RequestUser) {
     return this.users.findOneForActor(actor, id);
+  }
+
+  @Post(':id/invitation')
+  @HttpCode(HttpStatus.OK)
+  @Roles('RH_ADMIN')
+  @ApiOperation({
+    summary: 'Régénérer le code d’activation (collaborateur inactif)',
+    description:
+      'Révoque les codes d’activation précédents et en émet un nouveau (72 h). ' +
+      'À utiliser si le collaborateur a oublié le code — le clair n’est pas stocké en base.',
+  })
+  @ApiOkResponse({
+    description: 'Nouveau code',
+    schema: {
+      example: {
+        activationCode: '105742',
+        activationUrl: '/activate?code=105742',
+      },
+    },
+  })
+  @ApiNotFoundResponse()
+  @ApiBadRequestResponse({
+    description: 'Compte déjà activé ou rôle non collaborateur',
+  })
+  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse()
+  async regenerateInvitation(
+    @Param('id') id: string,
+    @CurrentUser() actor: RequestUser,
+  ) {
+    return this.auth.regenerateEmployeeInvitation(id, actor);
   }
 
   @Patch(':id/deactivate')

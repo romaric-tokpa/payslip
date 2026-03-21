@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, PipeTransform } from '@nestjs/common';
+import { isLikelyPdfUpload } from '../payslip-pdf.util';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 
@@ -11,7 +12,7 @@ export class PayslipFileValidationPipe implements PipeTransform<
     if (!file) {
       throw new BadRequestException('Fichier requis');
     }
-    if (file.mimetype !== 'application/pdf') {
+    if (!isLikelyPdfUpload(file)) {
       throw new BadRequestException('Seuls les fichiers PDF sont acceptés');
     }
     if (file.size > MAX_BYTES) {

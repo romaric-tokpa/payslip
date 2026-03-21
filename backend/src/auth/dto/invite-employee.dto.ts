@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class InviteEmployeeDto {
   @ApiProperty({ example: 'collab@entreprise.com' })
@@ -31,4 +38,14 @@ export class InviteEmployeeDto {
   @IsString()
   @MaxLength(120)
   position?: string;
+
+  @ApiPropertyOptional({ description: 'Département (réf. organisation)' })
+  @IsOptional()
+  @IsUUID('4')
+  departmentId?: string;
+
+  @ApiPropertyOptional({ description: 'Service (réf. organisation)' })
+  @IsOptional()
+  @IsUUID('4')
+  serviceId?: string;
 }

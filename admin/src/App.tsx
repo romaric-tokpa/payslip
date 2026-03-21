@@ -1,4 +1,4 @@
-import { ConfigProvider } from 'antd'
+import { App as AntdApp, ConfigProvider } from 'antd'
 import frFR from 'antd/locale/fr_FR'
 import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
@@ -20,7 +20,9 @@ export default function App() {
             },
           }}
         >
-          <RouterConfig />
+          <AntdApp>
+            <RouterConfig />
+          </AntdApp>
         </ConfigProvider>
       </AuthProvider>
     </BrowserRouter>

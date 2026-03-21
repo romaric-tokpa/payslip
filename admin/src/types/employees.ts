@@ -1,5 +1,20 @@
 import type { UserRole } from './auth'
 
+export type OrgDirectionBrief = { id: string; name: string }
+
+export type OrgDepartmentBrief = {
+  id: string
+  name: string
+  directionId: string | null
+  direction: OrgDirectionBrief | null
+}
+
+export type OrgServiceBrief = {
+  id: string
+  name: string
+  departmentId: string | null
+}
+
 /** Aligné sur `UserPublic` côté API (GET /users). */
 export type EmployeeUser = {
   id: string
@@ -9,6 +24,10 @@ export type EmployeeUser = {
   email: string
   employeeId: string | null
   department: string | null
+  departmentId: string | null
+  serviceId: string | null
+  orgDepartment: OrgDepartmentBrief | null
+  orgService: OrgServiceBrief | null
   position: string | null
   role: UserRole
   isActive: boolean
@@ -32,7 +51,12 @@ export type GetEmployeesParams = {
   page?: number
   limit?: number
   search?: string
+  /** Filtre texte historique (égalité exacte) */
   department?: string
+  /** Filtre structure (UUID département) */
+  departmentId?: string
+  /** Filtre par direction (UUID) */
+  directionId?: string
 }
 
 export type CreateEmployeePayload = {
@@ -42,6 +66,8 @@ export type CreateEmployeePayload = {
   employeeId: string
   department?: string
   position?: string
+  departmentId?: string
+  serviceId?: string
 }
 
 export type UpdateEmployeePayload = {
@@ -50,11 +76,13 @@ export type UpdateEmployeePayload = {
   email?: string
   department?: string
   position?: string
+  departmentId?: string | null
+  serviceId?: string | null
 }
 
 export type InviteEmployeeResponse = {
-  invitationToken: string
-  invitationUrl: string
+  activationCode: string
+  activationUrl: string
 }
 
 export type ImportEmployeeErrorDetail = {

@@ -1,37 +1,104 @@
 import { PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import {
+  App,
   Button,
   Input,
-  Modal,
   Select,
   Space,
   Tag,
   Typography,
-  message,
 } from 'antd'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as employeesApi from '../../services/employees.service'
+import * as orgApi from '../../services/organization.service'
 import type { EmployeeUser } from '../../types/employees'
+import type { OrgDepartment, OrgDirection } from '../../types/organization'
 import { getApiErrorMessage } from '../../utils/apiErrorMessage'
 import { EmployeeFormModal } from './EmployeeFormModal'
 import { EmployeeTable } from './EmployeeTable'
 import { ImportModal } from './ImportModal'
 import './employees.css'
 
-const { Title } = Typography
+const { Title, Paragraph } = Typography
 const TEAL = '#0F5C5E'
 
+type ActivationCodeModalContentProps = {
+  email: string
+  activationCode: string
+  variant: 'create' | 'regenerate'
+}
+
+function ActivationCodeModalContent({
+  email,
+  activationCode,
+  variant,
+}: ActivationCodeModalContentProps) {
+  return (
+    <div>
+      {variant === 'create' ? (
+        <p>
+          Le compte de <strong>{email}</strong> est créé mais inactif jusqu’à
+          activation. Communiquez ce code au collaborateur (valide{' '}
+          <strong>72 h</strong>). L’envoi automatique par e-mail n’est pas encore
+          branché.
+        </p>
+      ) : (
+        <p>
+          Un <strong>nouveau</strong> code a été généré pour{' '}
+          <strong>{email}</strong>. Les codes d’activation précédents ne sont plus
+          valides. Durée de validité : <strong>72 h</strong>.
+        </p>
+      )}
+      <p style={{ marginBottom: 8 }}>Code à saisir dans l’app mobile :</p>
+      <Paragraph
+        copyable
+        style={{
+          fontFamily: 'monospace',
+          fontSize: 22,
+          letterSpacing: '0.2em',
+          marginBottom: 0,
+        }}
+      >
+        {activationCode}
+      </Paragraph>
+      <p style={{ marginTop: 16, fontSize: 12, color: '#666' }}>
+        Dans l’app : connexion → « Activer mon compte (code d’activation) » →
+        saisir le code (1 à 6 chiffres, zéros de tête optionnels) et un mot de
+        passe (8 caractères minimum).
+      </p>
+    </div>
+  )
+}
+
 export function EmployeesPage() {
+  const { message, modal } = App.useApp()
   const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
   const [searchInput, setSearchInput] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [departmentFilter, setDepartmentFilter] = useState<string | undefined>(
-    undefined,
-  )
-  const [departmentOptions, setDepartmentOptions] = useState<string[]>([])
+  const [directionIdFilter, setDirectionIdFilter] = useState<
+    string | undefined
+  >(undefined)
+  const [departmentIdFilter, setDepartmentIdFilter] = useState<
+    string | undefined
+  >(undefined)
+  const [structureDirections, setStructureDirections] = useState<
+    OrgDirection[]
+  >([])
+  const [structureDepartments, setStructureDepartments] = useState<
+    OrgDepartment[]
+  >([])
+
+  const departmentFilterOptions = useMemo(() => {
+    if (!directionIdFilter) {
+      return structureDepartments
+    }
+    return structureDepartments.filter(
+      (d) => d.directionId === directionIdFilter,
+    )
+  }, [structureDepartments, directionIdFilter])
 
   const [dataSource, setDataSource] = useState<EmployeeUser[]>([])
   const [total, setTotal] = useState(0)
@@ -54,7 +121,28 @@ export function EmployeesPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, departmentFilter])
+  }, [debouncedSearch, directionIdFilter, departmentIdFilter])
+
+  useEffect(() => {
+    if (directionIdFilter == null || !departmentIdFilter) {
+      return
+    }
+    const d = structureDepartments.find((x) => x.id === departmentIdFilter)
+    if (d && d.directionId !== directionIdFilter) {
+      setDepartmentIdFilter(undefined)
+    }
+  }, [directionIdFilter, departmentIdFilter, structureDepartments])
+
+  useEffect(() => {
+    void Promise.all([orgApi.listDirections(), orgApi.listDepartments()])
+      .then(([dirs, depts]) => {
+        setStructureDirections(dirs)
+        setStructureDepartments(depts)
+      })
+      .catch(() => {
+        /* silencieux : filtres optionnels */
+      })
+  }, [])
 
   const loadEmployees = useCallback(async () => {
     setListLoading(true)
@@ -63,19 +151,11 @@ export function EmployeesPage() {
         page,
         limit,
         search: debouncedSearch || undefined,
-        department: departmentFilter,
+        directionId: directionIdFilter,
+        departmentId: departmentIdFilter,
       })
       setDataSource(res.data)
       setTotal(res.meta.total)
-      setDepartmentOptions((prev) => {
-        const next = new Set(prev)
-        for (const u of res.data) {
-          if (u.department) {
-            next.add(u.department)
-          }
-        }
-        return Array.from(next).sort((a, b) => a.localeCompare(b, 'fr'))
-      })
     } catch (e) {
       message.error(
         getApiErrorMessage(e, 'Impossible de charger les collaborateurs'),
@@ -83,7 +163,7 @@ export function EmployeesPage() {
     } finally {
       setListLoading(false)
     }
-  }, [page, limit, debouncedSearch, departmentFilter])
+  }, [page, limit, debouncedSearch, directionIdFilter, departmentIdFilter, message])
 
   useEffect(() => {
     void loadEmployees()
@@ -111,7 +191,7 @@ export function EmployeesPage() {
   }
 
   function confirmDeactivate(row: EmployeeUser) {
-    Modal.confirm({
+    modal.confirm({
       title: 'Désactiver ce collaborateur ?',
       content:
         "Le compte ne pourra plus se connecter tant qu'il n'est pas réactivé. Cette action est réversible.",
@@ -145,6 +225,45 @@ export function EmployeesPage() {
       setListLoading(false)
     }
   }
+
+  const handleRegenerateInvitation = useCallback(
+    (row: EmployeeUser) => {
+      modal.confirm({
+        title: 'Générer un nouveau code d’activation ?',
+        content:
+          'Les codes déjà communiqués au collaborateur cesseront de fonctionner. Réservé aux comptes encore inactifs (pas d’activation sur l’app).',
+        okText: 'Générer',
+        cancelText: 'Annuler',
+        onOk: async () => {
+          try {
+            const invite = await employeesApi.regenerateEmployeeInvitation(
+              row.id,
+            )
+            await loadEmployees()
+            message.success(`Nouveau code d’activation pour ${row.email}`)
+            modal.info({
+              title: 'Code d’activation',
+              width: 520,
+              okText: 'Fermer',
+              content: (
+                <ActivationCodeModalContent
+                  email={row.email}
+                  activationCode={invite.activationCode}
+                  variant="regenerate"
+                />
+              ),
+            })
+          } catch (e) {
+            message.error(
+              getApiErrorMessage(e, 'Impossible de régénérer le code'),
+            )
+            throw e
+          }
+        },
+      })
+    },
+    [loadEmployees, message, modal],
+  )
 
   return (
     <div>
@@ -186,11 +305,25 @@ export function EmployeesPage() {
         />
         <Select
           allowClear
+          placeholder="Toutes les directions"
+          style={{ minWidth: 220 }}
+          value={directionIdFilter}
+          onChange={(v) => setDirectionIdFilter(v)}
+          options={structureDirections.map((d) => ({
+            label: d.name,
+            value: d.id,
+          }))}
+        />
+        <Select
+          allowClear
           placeholder="Tous les départements"
-          style={{ minWidth: 200 }}
-          value={departmentFilter}
-          onChange={(v) => setDepartmentFilter(v)}
-          options={departmentOptions.map((d) => ({ label: d, value: d }))}
+          style={{ minWidth: 260 }}
+          value={departmentIdFilter}
+          onChange={(v) => setDepartmentIdFilter(v)}
+          options={departmentFilterOptions.map((d) => ({
+            label: d.name,
+            value: d.id,
+          }))}
         />
         <Tag color="processing">{total} résultat(s)</Tag>
       </div>
@@ -223,6 +356,7 @@ export function EmployeesPage() {
         onViewPayslips={(userId) => {
           navigate(`/payslips?userId=${encodeURIComponent(userId)}`)
         }}
+        onRegenerateInvitation={(row) => handleRegenerateInvitation(row)}
       />
 
       <EmployeeFormModal
@@ -236,7 +370,19 @@ export function EmployeesPage() {
         onSuccess={(result) => {
           void loadEmployees()
           if (result.kind === 'create') {
-            message.success(`Invitation envoyée à ${result.email}`)
+            message.success(`Compte créé pour ${result.email} — code ci-dessous`)
+            modal.info({
+              title: 'Code d’activation',
+              width: 520,
+              okText: 'Fermer',
+              content: (
+                <ActivationCodeModalContent
+                  email={result.email}
+                  activationCode={result.activationCode}
+                  variant="create"
+                />
+              ),
+            })
           } else {
             message.success('Collaborateur mis à jour')
           }

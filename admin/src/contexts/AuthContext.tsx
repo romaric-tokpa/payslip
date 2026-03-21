@@ -17,6 +17,7 @@ import {
   loadStoredSession,
   saveStoredSession,
   updateStoredTokens,
+  updateStoredUser,
 } from '../services/authStorage'
 import * as authApi from '../services/auth.service'
 import {
@@ -44,6 +45,7 @@ type AuthAction =
       }
     }
   | { type: 'LOGOUT' }
+  | { type: 'SET_USER'; payload: User }
 
 const initialState: AuthState = {
   isLoading: true,
@@ -84,6 +86,8 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
         accessToken: null,
         refreshToken: null,
       }
+    case 'SET_USER':
+      return { ...state, user: action.payload }
     default:
       return state
   }
@@ -97,6 +101,8 @@ type AuthContextValue = {
   refreshToken: string | null
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  /** Met à jour l’utilisateur en mémoire et dans le stockage local (ex. après PATCH profil). */
+  setSessionUser: (user: User) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -192,6 +198,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'LOGIN_SUCCESS', payload })
   }, [])
 
+  const setSessionUser = useCallback((nextUser: User) => {
+    updateStoredUser(nextUser)
+    dispatch({ type: 'SET_USER', payload: nextUser })
+  }, [])
+
   const logout = useCallback(async () => {
     const tokenToRevoke = getRefreshTokenFromStore()
     if (tokenToRevoke) {
@@ -214,6 +225,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshToken: state.refreshToken,
       login,
       logout,
+      setSessionUser,
     }),
     [
       state.user,
@@ -223,6 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       state.refreshToken,
       login,
       logout,
+      setSessionUser,
     ],
   )
 

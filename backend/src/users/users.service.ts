@@ -11,6 +11,7 @@ import { Prisma, User, UserRole } from '@prisma/client';
 import { isEmail } from 'class-validator';
 import type { RequestUser } from '../auth/auth.types';
 import { AuthService } from '../auth/auth.service';
+import { OrganizationService } from '../organization/organization.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueryUsersDto } from './dto/query-users.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -37,10 +38,23 @@ export type PaginatedUsers = {
   };
 };
 
+export type CompanyBrief = {
+  id: string;
+  name: string;
+  rccm: string | null;
+  address: string | null;
+};
+
+export type MeResponse = {
+  user: UserPublic;
+  company: CompanyBrief | null;
+};
+
 @Injectable()
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly organization: OrganizationService,
     @Inject(forwardRef(() => AuthService))
     private readonly auth: AuthService,
   ) {}
@@ -76,6 +90,66 @@ export class UsersService {
 
   isRhAdmin(role: UserRole): boolean {
     return role === 'RH_ADMIN';
+  }
+
+  async getMe(actor: RequestUser): Promise<MeResponse> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: actor.id },
+      select: userPublicSelect,
+    });
+    if (!user) {
+      throw new NotFoundException('Utilisateur introuvable');
+    }
+    let company: CompanyBrief | null = null;
+    if (user.companyId) {
+      company = await this.prisma.company.findUnique({
+        where: { id: user.companyId },
+        select: {
+          id: true,
+          name: true,
+          rccm: true,
+          address: true,
+        },
+      });
+    }
+    return { user, company };
+  }
+
+  async updateMe(actor: RequestUser, dto: UpdateUserDto): Promise<MeResponse> {
+    const existing = await this.prisma.user.findUnique({
+      where: { id: actor.id },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new NotFoundException('Utilisateur introuvable');
+    }
+
+    const data: Prisma.UserUpdateInput = {};
+    if (dto.firstName !== undefined) data.firstName = dto.firstName;
+    if (dto.lastName !== undefined) data.lastName = dto.lastName;
+    if (dto.department !== undefined) data.department = dto.department;
+    if (dto.position !== undefined) data.position = dto.position;
+    if (dto.email !== undefined) {
+      const email = dto.email.toLowerCase();
+      const taken = await this.prisma.user.findFirst({
+        where: { email, NOT: { id: actor.id } },
+        select: { id: true },
+      });
+      if (taken) {
+        throw new ConflictException('Cet e-mail est déjà utilisé');
+      }
+      data.email = email;
+    }
+
+    if (Object.keys(data).length === 0) {
+      return this.getMe(actor);
+    }
+
+    await this.prisma.user.update({
+      where: { id: actor.id },
+      data,
+    });
+    return this.getMe(actor);
   }
 
   async findAllPaginated(
@@ -127,6 +201,16 @@ export class UsersService {
 
     if (query.department?.trim()) {
       where.department = query.department.trim();
+    }
+
+    if (query.departmentId?.trim()) {
+      where.departmentId = query.departmentId.trim();
+    }
+
+    if (query.directionId?.trim()) {
+      where.orgDepartment = {
+        directionId: query.directionId.trim(),
+      };
     }
 
     if (query.search?.trim()) {
@@ -186,11 +270,49 @@ export class UsersService {
       throw new ForbiddenException();
     }
 
+    const resolvedDepartmentId =
+      dto.departmentId !== undefined
+        ? dto.departmentId
+        : existing.departmentId;
+    const resolvedServiceId =
+      dto.serviceId !== undefined ? dto.serviceId : existing.serviceId;
+
+    if (dto.departmentId !== undefined || dto.serviceId !== undefined) {
+      await this.organization.assertOrgAssignment(
+        actor.companyId!,
+        resolvedDepartmentId,
+        resolvedServiceId,
+      );
+    }
+
     const data: Prisma.UserUpdateInput = {};
     if (dto.firstName !== undefined) data.firstName = dto.firstName;
     if (dto.lastName !== undefined) data.lastName = dto.lastName;
     if (dto.department !== undefined) data.department = dto.department;
     if (dto.position !== undefined) data.position = dto.position;
+    if (dto.departmentId !== undefined) {
+      data.orgDepartment =
+        dto.departmentId === null
+          ? { disconnect: true }
+          : { connect: { id: dto.departmentId } };
+      if (dto.departmentId) {
+        const d = await this.prisma.department.findFirst({
+          where: { id: dto.departmentId, companyId: actor.companyId! },
+          select: { name: true },
+        });
+        if (d) {
+          data.department = d.name;
+        }
+      } else {
+        data.department = null;
+      }
+    }
+    if (dto.serviceId !== undefined) {
+      data.orgService =
+        dto.serviceId === null
+          ? { disconnect: true }
+          : { connect: { id: dto.serviceId } };
+    }
     if (dto.email !== undefined) {
       const email = dto.email.toLowerCase();
       const taken = await this.prisma.user.findFirst({
@@ -359,6 +481,20 @@ export class UsersService {
     const seenMatricules = new Set<string>();
     const companyId = adminUser.companyId!;
 
+    const deptRows = await this.prisma.department.findMany({
+      where: { companyId },
+      select: { id: true, name: true },
+    });
+    const deptByNorm = new Map<string, string>();
+    for (const d of deptRows) {
+      const key = d.name
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      deptByNorm.set(key, d.id);
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const line = i + 2;
       const raw = rows[i];
@@ -414,6 +550,16 @@ export class UsersService {
         continue;
       }
 
+      const rawDept = f.departement.trim();
+      let departmentId: string | undefined;
+      if (rawDept) {
+        const key = rawDept
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+        departmentId = deptByNorm.get(key);
+      }
+
       try {
         await this.auth.inviteEmployee(
           {
@@ -421,7 +567,9 @@ export class UsersService {
             firstName: f.prenom.trim(),
             lastName: f.nom.trim(),
             employeeId: matriculeKey,
-            department: f.departement.trim() || undefined,
+            department:
+              rawDept && !departmentId ? rawDept : undefined,
+            departmentId,
             position: f.poste.trim() || undefined,
           },
           adminUser,

@@ -14,6 +14,8 @@ jest.mock('@aws-sdk/client-s3', () => ({
   PutObjectCommand: jest.fn().mockImplementation((input: object) => input),
   GetObjectCommand: jest.fn().mockImplementation((input: object) => input),
   DeleteObjectCommand: jest.fn().mockImplementation((input: object) => input),
+  HeadBucketCommand: jest.fn().mockImplementation((input: object) => input),
+  CreateBucketCommand: jest.fn().mockImplementation((input: object) => input),
 }));
 
 jest.mock('@aws-sdk/s3-request-presigner', () => ({
@@ -35,6 +37,7 @@ describe('StorageService', () => {
       };
       return env[key];
     }),
+    get: jest.fn((_key: string, defaultValue?: string) => defaultValue ?? ''),
   };
 
   beforeEach(async () => {
@@ -104,6 +107,47 @@ describe('StorageService', () => {
     expect(getSignedUrl).toHaveBeenCalled();
   });
 
+  it('crée un second S3Client pour la présignation si S3_PUBLIC_ENDPOINT', async () => {
+    jest.clearAllMocks();
+    const send = jest.fn().mockResolvedValue({});
+    (S3Client as unknown as jest.Mock).mockImplementation(() => ({ send }));
+    jest.mocked(getSignedUrl).mockResolvedValue('https://public-presigned/url');
+
+    const config = {
+      getOrThrow: jest.fn((key: string) => {
+        const env: Record<string, string> = {
+          S3_ENDPOINT: 'http://localhost:9000',
+          S3_REGION: 'us-east-1',
+          S3_ACCESS_KEY: 'ak',
+          S3_SECRET_KEY: 'sk',
+          S3_BUCKET: 'test-bucket',
+        };
+        return env[key];
+      }),
+      get: jest.fn((key: string) =>
+        key === 'S3_PUBLIC_ENDPOINT' ? 'http://192.168.1.6:9000' : '',
+      ),
+    };
+
+    const module = await Test.createTestingModule({
+      providers: [StorageService, { provide: ConfigService, useValue: config }],
+    }).compile();
+
+    const svc = module.get(StorageService);
+    expect(S3Client).toHaveBeenCalledTimes(2);
+    expect(S3Client).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        endpoint: 'http://192.168.1.6:9000',
+        forcePathStyle: true,
+      }),
+    );
+
+    const url = await svc.getPresignedUrl('doc.pdf');
+    expect(url).toBe('https://public-presigned/url');
+    expect(getSignedUrl).toHaveBeenCalled();
+  });
+
   it('deleteFile envoie DeleteObjectCommand', async () => {
     await service.deleteFile('to/delete.pdf');
     expect(DeleteObjectCommand).toHaveBeenCalledWith({
@@ -141,6 +185,7 @@ describe('StorageService', () => {
         };
         return env[key];
       }),
+      get: jest.fn((_key: string, defaultValue?: string) => defaultValue ?? ''),
     };
 
     const module = await Test.createTestingModule({

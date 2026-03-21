@@ -1,4 +1,5 @@
 import {
+  ApartmentOutlined,
   AuditOutlined,
   DashboardOutlined,
   FileProtectOutlined,
@@ -39,6 +40,11 @@ const menuItems: MenuItem[] = [
     label: 'Collaborateurs',
   },
   {
+    key: '/organization',
+    icon: <ApartmentOutlined />,
+    label: 'Organisation',
+  },
+  {
     key: '/payslips',
     icon: <FileProtectOutlined />,
     label: 'Bulletins de paie',
@@ -62,6 +68,9 @@ function selectedMenuKey(pathname: string): string {
   if (pathname.startsWith('/employees')) {
     return '/employees'
   }
+  if (pathname.startsWith('/organization')) {
+    return '/organization'
+  }
   if (pathname.startsWith('/audit')) {
     return '/audit'
   }
@@ -80,6 +89,7 @@ function breadcrumbItemsFor(pathname: string) {
   const segments = normalized.split('/').filter(Boolean)
   const labels: Record<string, string> = {
     employees: 'Collaborateurs',
+    organization: 'Organisation',
     payslips: 'Bulletins de paie',
     upload: 'Téléverser',
     audit: "Logs d'audit",

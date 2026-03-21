@@ -21,6 +21,16 @@ export function updateStoredTokens(
   localStorage.setItem(STORAGE_KEYS.refreshToken, refreshToken)
 }
 
+/** Met à jour l’utilisateur en session en conservant les tokens. */
+export function updateStoredUser(user: User): void {
+  const accessToken = localStorage.getItem(STORAGE_KEYS.accessToken)
+  const refreshToken = localStorage.getItem(STORAGE_KEYS.refreshToken)
+  if (!accessToken || !refreshToken) {
+    return
+  }
+  saveStoredSession({ accessToken, refreshToken, user })
+}
+
 export function loadStoredSession(): StoredSession | null {
   const accessToken = localStorage.getItem(STORAGE_KEYS.accessToken)
   const refreshToken = localStorage.getItem(STORAGE_KEYS.refreshToken)

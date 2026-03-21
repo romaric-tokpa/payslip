@@ -7,6 +7,7 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from '../auth/auth.service';
 import type { RequestUser } from '../auth/auth.types';
+import { OrganizationService } from '../organization/organization.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from './users.service';
 import { userPublicSelect } from './dto/user-public.select';
@@ -39,9 +40,11 @@ describe('UsersService', () => {
       findUniqueOrThrow: jest.Mock;
       update: jest.Mock;
     };
+    department: { findMany: jest.Mock; findFirst: jest.Mock };
     $transaction: jest.Mock;
     auditLog: { create: jest.Mock };
   };
+  let organization: { assertOrgAssignment: jest.Mock };
 
   const publicUser = {
     id: 'u1',
@@ -51,6 +54,19 @@ describe('UsersService', () => {
     email: 'a@b.com',
     employeeId: 'E1',
     department: 'D1',
+    departmentId: null as string | null,
+    serviceId: null as string | null,
+    orgDepartment: null as {
+      id: string;
+      name: string;
+      directionId: string | null;
+      direction: { id: string; name: string } | null;
+    } | null,
+    orgService: null as {
+      id: string;
+      name: string;
+      departmentId: string | null;
+    } | null,
     position: 'P1',
     role: 'EMPLOYEE' as const,
     isActive: true,
@@ -82,8 +98,8 @@ describe('UsersService', () => {
   beforeEach(async () => {
     auth = {
       inviteEmployee: jest.fn().mockResolvedValue({
-        invitationToken: 'tok',
-        invitationUrl: '/activate?token=tok',
+        activationCode: '123456',
+        activationUrl: '/activate?code=123456',
       }),
     };
 
@@ -98,12 +114,21 @@ describe('UsersService', () => {
       },
       $transaction: jest.fn(),
       auditLog: { create: jest.fn().mockResolvedValue({}) },
+      department: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn(),
+      },
+    };
+
+    organization = {
+      assertOrgAssignment: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
         { provide: PrismaService, useValue: prisma },
+        { provide: OrganizationService, useValue: organization },
         { provide: AuthService, useValue: auth },
       ],
     }).compile();
@@ -198,6 +223,8 @@ describe('UsersService', () => {
         id: 'u1',
         companyId: 'co-1',
         passwordHash: 'x',
+        departmentId: null,
+        serviceId: null,
       });
       prisma.user.findFirst.mockResolvedValue(null);
       prisma.user.update.mockResolvedValue({ ...publicUser, firstName: 'Z' });
@@ -221,6 +248,8 @@ describe('UsersService', () => {
       prisma.user.findUnique.mockResolvedValue({
         id: 'u1',
         companyId: 'co-1',
+        departmentId: null,
+        serviceId: null,
       });
       prisma.user.findFirst.mockResolvedValue({ id: 'other' });
       await expect(

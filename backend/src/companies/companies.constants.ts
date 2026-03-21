@@ -1,0 +1,3 @@
+export const COMPANY_AUDIT = {
+  LEGAL_INFO_UPDATED: 'COMPANY_LEGAL_INFO_UPDATED',
+} as const;

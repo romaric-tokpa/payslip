@@ -77,12 +77,16 @@ export const api = axios.create({
 })
 
 api.interceptors.request.use(async (config) => {
+  const headers = AxiosHeaders.from(config.headers as AxiosHeaders | undefined)
+  // Sinon axios garde le défaut application/json et Multer ne reçoit pas le fichier (400).
+  if (config.data instanceof FormData) {
+    headers.delete('Content-Type')
+  }
   const token = getAccessTokenFromStore()
   if (token) {
-    const headers = AxiosHeaders.from(config.headers as AxiosHeaders | undefined)
     headers.set('Authorization', `Bearer ${token}`)
-    config.headers = headers
   }
+  config.headers = headers
   return config
 })
 
@@ -134,7 +138,12 @@ api.interceptors.response.use(
       const { data } = await axios.post<RefreshTokenPayload>(
         `${baseURL}/auth/refresh`,
         { refreshToken },
-        { headers: { 'Content-Type': 'application/json' }, timeout: 30_000 },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 30_000,
+          // Évite qu’un 301/302 transforme le POST en GET lors du suivi de redirection
+          maxRedirects: 0,
+        },
       )
       await updateStoredTokens(data.accessToken, data.refreshToken)
       sessionRefreshedHandler?.(data)

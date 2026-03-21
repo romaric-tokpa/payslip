@@ -1,7 +1,9 @@
-import { Form, Input, Modal, message } from 'antd'
-import { useEffect, useState } from 'react'
+import { App, Form, Input, Modal, Select } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
 import type { EmployeeUser } from '../../types/employees'
+import type { OrgDepartment, OrgService } from '../../types/organization'
 import * as employeesApi from '../../services/employees.service'
+import * as orgApi from '../../services/organization.service'
 import { getApiErrorMessage } from '../../utils/apiErrorMessage'
 
 const TEAL = '#0F5C5E'
@@ -13,12 +15,18 @@ type FormValues = {
   firstName: string
   lastName: string
   email: string
-  department?: string
+  departmentId?: string
+  serviceId?: string
   position?: string
 }
 
 export type EmployeeFormSuccess =
-  | { kind: 'create'; email: string }
+  | {
+      kind: 'create'
+      email: string
+      activationCode: string
+      activationUrl: string
+    }
   | { kind: 'edit' }
 
 type EmployeeFormModalProps = {
@@ -34,6 +42,16 @@ function emptyToUndefined(s: string | undefined): string | undefined {
   return t === '' || t == null ? undefined : t
 }
 
+function eligibleServicesForDepartment(
+  all: OrgService[],
+  departmentId: string | undefined,
+): OrgService[] {
+  return all.filter(
+    (s) =>
+      s.departmentId == null || s.departmentId === departmentId,
+  )
+}
+
 export function EmployeeFormModal({
   open,
   mode,
@@ -41,8 +59,38 @@ export function EmployeeFormModal({
   onClose,
   onSuccess,
 }: EmployeeFormModalProps) {
+  const { message } = App.useApp()
   const [form] = Form.useForm<FormValues>()
+  const departmentId = Form.useWatch('departmentId', form)
   const [submitting, setSubmitting] = useState(false)
+  const [orgLoading, setOrgLoading] = useState(false)
+  const [departments, setDepartments] = useState<OrgDepartment[]>([])
+  const [allServices, setAllServices] = useState<OrgService[]>([])
+
+  const serviceOptions = useMemo(() => {
+    return eligibleServicesForDepartment(
+      allServices,
+      departmentId ?? undefined,
+    )
+  }, [allServices, departmentId])
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    setOrgLoading(true)
+    void Promise.all([orgApi.listDepartments(), orgApi.listServices()])
+      .then(([depts, svcs]) => {
+        setDepartments(depts)
+        setAllServices(svcs)
+      })
+      .catch((e) => {
+        message.error(
+          getApiErrorMessage(e, 'Impossible de charger départements / services'),
+        )
+      })
+      .finally(() => setOrgLoading(false))
+  }, [open, message])
 
   useEffect(() => {
     if (!open) {
@@ -54,7 +102,8 @@ export function EmployeeFormModal({
         firstName: employee.firstName,
         lastName: employee.lastName,
         email: employee.email,
-        department: employee.department ?? '',
+        departmentId: employee.departmentId ?? undefined,
+        serviceId: employee.serviceId ?? undefined,
         position: employee.position ?? '',
       })
     } else {
@@ -62,28 +111,55 @@ export function EmployeeFormModal({
     }
   }, [open, mode, employee, form])
 
+  useEffect(() => {
+    if (!open || orgLoading) {
+      return
+    }
+    const dept = form.getFieldValue('departmentId') as string | undefined
+    const eligible = eligibleServicesForDepartment(allServices, dept)
+    const sid = form.getFieldValue('serviceId') as string | undefined
+    if (sid && !eligible.some((s) => s.id === sid)) {
+      form.setFieldValue('serviceId', undefined)
+    }
+  }, [open, orgLoading, allServices, departmentId, form])
+
   async function handleOk() {
     try {
       const values = await form.validateFields()
       setSubmitting(true)
       if (mode === 'create') {
         const email = values.email.trim().toLowerCase()
-        await employeesApi.createEmployee({
+        const invite = await employeesApi.createEmployee({
           email,
           firstName: values.firstName.trim(),
           lastName: values.lastName.trim(),
           employeeId: values.employeeId.trim(),
-          department: emptyToUndefined(values.department),
           position: emptyToUndefined(values.position),
+          ...(values.departmentId
+            ? { departmentId: values.departmentId }
+            : {}),
+          ...(values.serviceId ? { serviceId: values.serviceId } : {}),
         })
-        onSuccess({ kind: 'create', email })
+        onSuccess({
+          kind: 'create',
+          email,
+          activationCode: invite.activationCode,
+          activationUrl: invite.activationUrl,
+        })
       } else if (employee) {
         await employeesApi.updateEmployee(employee.id, {
           firstName: values.firstName.trim(),
           lastName: values.lastName.trim(),
           email: values.email.trim().toLowerCase(),
-          department: emptyToUndefined(values.department),
           position: emptyToUndefined(values.position),
+          departmentId:
+            values.departmentId != null && values.departmentId !== ''
+              ? values.departmentId
+              : null,
+          serviceId:
+            values.serviceId != null && values.serviceId !== ''
+              ? values.serviceId
+              : null,
         })
         onSuccess({ kind: 'edit' })
       }
@@ -164,11 +240,34 @@ export function EmployeeFormModal({
           <Input autoComplete="email" />
         </Form.Item>
         <Form.Item
-          name="department"
+          name="departmentId"
           label="Département"
-          rules={[{ max: 120, message: 'Maximum 120 caractères' }]}
+          tooltip="Configurez les départements dans Organisation."
         >
-          <Input placeholder="Optionnel" />
+          <Select
+            allowClear
+            placeholder="Aucun"
+            loading={orgLoading}
+            options={departments.map((d) => ({ label: d.name, value: d.id }))}
+          />
+        </Form.Item>
+        <Form.Item
+          name="serviceId"
+          label="Service"
+          tooltip="Services sans département sont toujours proposés ; avec un département, les services du même département le sont aussi."
+        >
+          <Select
+            allowClear
+            placeholder="Aucun"
+            loading={orgLoading}
+            options={serviceOptions.map((s) => ({
+              label:
+                s.departmentId == null
+                  ? `${s.name} (sans département)`
+                  : s.name,
+              value: s.id,
+            }))}
+          />
         </Form.Item>
         <Form.Item
           name="position"

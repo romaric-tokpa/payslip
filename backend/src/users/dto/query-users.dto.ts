@@ -1,6 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class QueryUsersDto {
   @ApiPropertyOptional({ default: 1, minimum: 1 })
@@ -23,8 +30,20 @@ export class QueryUsersDto {
   @IsString()
   search?: string;
 
-  @ApiPropertyOptional({ description: 'Filtre département (égalité exacte)' })
+  @ApiPropertyOptional({
+    description: 'Filtre libellé département (texte historique, égalité exacte)',
+  })
   @IsOptional()
   @IsString()
   department?: string;
+
+  @ApiPropertyOptional({ description: 'Filtre par département (UUID structure)' })
+  @IsOptional()
+  @IsUUID('4')
+  departmentId?: string;
+
+  @ApiPropertyOptional({ description: 'Filtre par direction (UUID) via le département' })
+  @IsOptional()
+  @IsUUID('4')
+  directionId?: string;
 }

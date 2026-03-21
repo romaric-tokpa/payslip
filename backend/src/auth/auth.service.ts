@@ -1,5 +1,6 @@
 import * as crypto from 'node:crypto';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -7,6 +8,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  NotFoundException,
   UnauthorizedException,
   forwardRef,
 } from '@nestjs/common';
@@ -15,6 +17,7 @@ import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import type { SignOptions } from 'jsonwebtoken';
 import { Prisma, User, UserRole } from '@prisma/client';
+import { OrganizationService } from '../organization/organization.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
@@ -55,6 +58,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => UsersService))
     private readonly users: UsersService,
+    private readonly organization: OrganizationService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
   ) {
@@ -86,7 +90,7 @@ export class AuthService {
       const company = await tx.company.create({
         data: {
           name: dto.companyName,
-          siret: dto.companySiret ?? null,
+          rccm: dto.companyRccm ?? null,
         },
       });
       return tx.user.create({
@@ -170,20 +174,35 @@ export class AuthService {
     const pepper = this.refreshPepper();
     const tokenHash = hashRefreshToken(refreshToken, pepper);
 
-    const session = await this.prisma.session.findFirst({
-      where: {
-        tokenHash,
-        expiresAt: { gt: new Date() },
-        deviceInfo: null,
-      },
-      include: { user: true },
+    /** Évite P2025 / 500 si deux refresh partent en parallèle (ex. React StrictMode). */
+    const session = await this.prisma.$transaction(async (tx) => {
+      const found = await tx.session.findFirst({
+        where: {
+          tokenHash,
+          expiresAt: { gt: new Date() },
+          deviceInfo: null,
+        },
+        include: { user: true },
+      });
+
+      if (!found || !found.user.isActive) {
+        return null;
+      }
+
+      const removed = await tx.session.deleteMany({
+        where: { id: found.id, tokenHash },
+      });
+
+      if (removed.count !== 1) {
+        return null;
+      }
+
+      return found;
     });
 
-    if (!session || !session.user.isActive) {
+    if (!session) {
       throw new UnauthorizedException('Refresh token invalide ou expiré');
     }
-
-    await this.prisma.session.delete({ where: { id: session.id } });
 
     const tokens = await this.generateTokens(
       session.user.id,
@@ -229,6 +248,34 @@ export class AuthService {
     return this.refreshPepper();
   }
 
+  /** Code numérique 6 chiffres ; unicité parmi les invitations non expirées. */
+  private async issueUniqueActivationCode(): Promise<string> {
+    const pepper = this.opaquePepper();
+    const maxAttempts = 64;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+      const tokenHash = hashOpaqueToken(
+        SESSION_DEVICE.INVITATION,
+        code,
+        pepper,
+      );
+      const clash = await this.prisma.session.findFirst({
+        where: {
+          tokenHash,
+          deviceInfo: SESSION_DEVICE.INVITATION,
+          expiresAt: { gt: new Date() },
+        },
+        select: { id: true },
+      });
+      if (!clash) {
+        return code;
+      }
+    }
+    throw new ConflictException(
+      'Impossible d’émettre un code d’activation, veuillez réessayer',
+    );
+  }
+
   private async persistRefreshSession(
     userId: string,
     refreshTokenPlain: string,
@@ -250,7 +297,7 @@ export class AuthService {
   async inviteEmployee(
     dto: InviteEmployeeDto,
     inviter: RequestUser,
-  ): Promise<{ invitationToken: string; invitationUrl: string }> {
+  ): Promise<{ activationCode: string; activationUrl: string }> {
     if (inviter.role !== 'RH_ADMIN') {
       throw new ForbiddenException(
         'Seul un administrateur RH peut inviter un collaborateur',
@@ -267,17 +314,32 @@ export class AuthService {
       throw new ConflictException('Cet e-mail est déjà utilisé');
     }
 
+    await this.organization.assertOrgAssignment(
+      inviter.companyId,
+      dto.departmentId ?? null,
+      dto.serviceId ?? null,
+    );
+
     const tempPassword = crypto.randomBytes(32).toString('hex');
     const passwordHash = await this.hashPassword(tempPassword);
-    const invitationToken = crypto.randomUUID();
+    const activationCode = await this.issueUniqueActivationCode();
     const tokenHash = hashOpaqueToken(
       SESSION_DEVICE.INVITATION,
-      invitationToken,
+      activationCode,
       this.opaquePepper(),
     );
 
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + 72);
+
+    let departmentLabel = dto.department?.trim() || null;
+    if (dto.departmentId) {
+      const d = await this.prisma.department.findFirst({
+        where: { id: dto.departmentId, companyId: inviter.companyId },
+        select: { name: true },
+      });
+      departmentLabel = d?.name ?? departmentLabel;
+    }
 
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -287,7 +349,9 @@ export class AuthService {
             firstName: dto.firstName,
             lastName: dto.lastName,
             employeeId: dto.employeeId,
-            department: dto.department ?? null,
+            department: departmentLabel,
+            departmentId: dto.departmentId ?? null,
+            serviceId: dto.serviceId ?? null,
             position: dto.position ?? null,
             role: 'EMPLOYEE',
             companyId: inviter.companyId,
@@ -318,17 +382,90 @@ export class AuthService {
     }
 
     return {
-      invitationToken,
-      invitationUrl: `/activate?token=${invitationToken}`,
+      activationCode,
+      activationUrl: `/activate?code=${activationCode}`,
+    };
+  }
+
+  /**
+   * Émet un nouveau code d’activation (72 h) pour un collaborateur encore inactif.
+   * Les codes précédents (même type) sont révoqués — le clair n’est jamais stocké en base.
+   */
+  async regenerateEmployeeInvitation(
+    employeeUserId: string,
+    inviter: RequestUser,
+  ): Promise<{ activationCode: string; activationUrl: string }> {
+    if (inviter.role !== 'RH_ADMIN') {
+      throw new ForbiddenException(
+        'Seul un administrateur RH peut régénérer un code d’activation',
+      );
+    }
+    if (!inviter.companyId) {
+      throw new ForbiddenException(
+        'Compte administrateur sans entreprise associée',
+      );
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: employeeUserId },
+    });
+    if (!user) {
+      throw new NotFoundException('Utilisateur introuvable');
+    }
+    if (user.companyId !== inviter.companyId) {
+      throw new ForbiddenException();
+    }
+    if (user.role !== 'EMPLOYEE') {
+      throw new BadRequestException(
+        'Seuls les comptes collaborateur peuvent recevoir un code d’activation',
+      );
+    }
+    if (user.isActive) {
+      throw new BadRequestException(
+        'Ce compte est déjà activé : le collaborateur doit se connecter avec son mot de passe.',
+      );
+    }
+
+    const activationCode = await this.issueUniqueActivationCode();
+    const tokenHash = hashOpaqueToken(
+      SESSION_DEVICE.INVITATION,
+      activationCode,
+      this.opaquePepper(),
+    );
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 72);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.session.deleteMany({
+        where: {
+          userId: user.id,
+          deviceInfo: SESSION_DEVICE.INVITATION,
+        },
+      });
+      await tx.session.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          deviceInfo: SESSION_DEVICE.INVITATION,
+          expiresAt,
+        },
+      });
+    });
+
+    return {
+      activationCode,
+      activationUrl: `/activate?code=${activationCode}`,
     };
   }
 
   async activateInvitation(
     dto: ActivateInvitationDto,
   ): Promise<{ user: AuthUserView } & TokenPair> {
+    const code = dto.activationCode.replace(/\s/g, '');
+    const normalized = code.padStart(6, '0');
     const tokenHash = hashOpaqueToken(
       SESSION_DEVICE.INVITATION,
-      dto.invitationToken,
+      normalized,
       this.opaquePepper(),
     );
 
@@ -342,12 +479,12 @@ export class AuthService {
     });
 
     if (!session) {
-      throw new UnauthorizedException('Invitation invalide ou expirée');
+      throw new UnauthorizedException('Code d’activation invalide ou expiré');
     }
 
     const { user } = session;
     if (user.role !== 'EMPLOYEE' || user.isActive) {
-      throw new UnauthorizedException('Invitation invalide ou expirée');
+      throw new UnauthorizedException('Code d’activation invalide ou expiré');
     }
 
     const passwordHash = await this.hashPassword(dto.newPassword);
@@ -456,6 +593,38 @@ export class AuthService {
     });
 
     return { message: 'Mot de passe mis à jour. Vous pouvez vous connecter.' };
+  }
+
+  async changePassword(
+    actor: RequestUser,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: actor.id },
+      select: { id: true, passwordHash: true, isActive: true },
+    });
+    if (!user?.isActive) {
+      throw new UnauthorizedException();
+    }
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) {
+      throw new UnauthorizedException('Mot de passe actuel incorrect');
+    }
+    const passwordHash = await this.hashPassword(newPassword);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actor.id,
+        action: AUDIT.PASSWORD_CHANGED,
+        entityType: 'User',
+        entityId: actor.id,
+      },
+    });
+    return { message: 'Mot de passe mis à jour.' };
   }
 
   private toAuthUserView(user: User): AuthUserView {
