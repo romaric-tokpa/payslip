@@ -3,8 +3,8 @@
  * vide pour un fichier .pdf — on accepte dans ce cas si l’extension est .pdf.
  */
 export function isLikelyPdfUpload(file: {
-  originalname?: string
-  mimetype?: string
+  originalname?: string;
+  mimetype?: string;
 }): boolean {
   const name = (file.originalname || '').toLowerCase();
   const mime = (file.mimetype || '').toLowerCase();

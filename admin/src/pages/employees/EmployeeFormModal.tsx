@@ -1,12 +1,10 @@
-import { App, Form, Input, Modal, Select } from 'antd'
+import { App, Button, Form, Input, Modal, Select } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import type { EmployeeUser } from '../../types/employees'
 import type { OrgDepartment, OrgService } from '../../types/organization'
 import * as employeesApi from '../../services/employees.service'
 import * as orgApi from '../../services/organization.service'
 import { getApiErrorMessage } from '../../utils/apiErrorMessage'
-
-const TEAL = '#0F5C5E'
 
 export type EmployeeFormModalMode = 'create' | 'edit'
 
@@ -123,7 +121,7 @@ export function EmployeeFormModal({
     }
   }, [open, orgLoading, allServices, departmentId, form])
 
-  async function handleOk() {
+  async function handleSubmit() {
     try {
       const values = await form.validateFields()
       setSubmitting(true)
@@ -175,25 +173,42 @@ export function EmployeeFormModal({
   }
 
   const title =
-    mode === 'create' ? 'Ajouter un collaborateur' : 'Modifier le collaborateur'
+    mode === 'create' ? 'Nouveau collaborateur' : 'Modifier le collaborateur'
+
+  const footer = (
+    <div className="employee-form-modal__footer">
+      <Button variant="outlined" onClick={onClose}>
+        Annuler
+      </Button>
+      <Button
+        type="primary"
+        loading={submitting}
+        onClick={() => void handleSubmit()}
+        className="employees-btn-primary-teal"
+      >
+        {mode === 'create' ? 'Créer et inviter' : 'Enregistrer'}
+      </Button>
+    </div>
+  )
 
   return (
     <Modal
       title={title}
       open={open}
       onCancel={onClose}
-      onOk={() => void handleOk()}
-      confirmLoading={submitting}
+      footer={footer}
       destroyOnHidden
-      okText={mode === 'create' ? 'Inviter' : 'Enregistrer'}
-      okButtonProps={{ style: { backgroundColor: TEAL } }}
       afterClose={() => form.resetFields()}
+      className="employee-form-modal"
+      styles={{
+        body: { paddingTop: 8 },
+      }}
     >
       <Form<FormValues>
         form={form}
         layout="vertical"
         requiredMark={false}
-        style={{ marginTop: 16 }}
+        style={{ marginTop: 8 }}
       >
         <Form.Item
           name="employeeId"
@@ -231,10 +246,10 @@ export function EmployeeFormModal({
         </Form.Item>
         <Form.Item
           name="email"
-          label="E-mail"
+          label="Email"
           rules={[
-            { required: true, message: 'E-mail requis' },
-            { type: 'email', message: 'E-mail invalide' },
+            { required: true, message: 'Email requis' },
+            { type: 'email', message: 'Email invalide' },
           ]}
         >
           <Input autoComplete="email" />
@@ -246,7 +261,7 @@ export function EmployeeFormModal({
         >
           <Select
             allowClear
-            placeholder="Aucun"
+            placeholder="Sélectionner"
             loading={orgLoading}
             options={departments.map((d) => ({ label: d.name, value: d.id }))}
           />

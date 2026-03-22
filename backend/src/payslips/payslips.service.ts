@@ -14,44 +14,27 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { UsersService } from '../users/users.service';
-import { PAYSLIP_AUDIT } from './payslips.constants';
+import {
+  PAYSLIP_AUDIT,
+  PAYSLIP_BULK_USER_MESSAGES,
+} from './payslips.constants';
 import { QueryPayslipsDto } from './dto/query-payslips.dto';
+import { parseBulkFilename } from './payslip-bulk-filename.util';
+import {
+  PayslipBulkTempStore,
+  type PayslipBulkStoredFile,
+} from './payslip-bulk-temp.store';
+import type { PayslipMatchResult } from './payslip-matcher.types';
+import { PayslipMatcherService } from './payslip-matcher.service';
+import { PayslipPdfExtractorService } from './payslip-pdf-extractor.service';
 import { isLikelyPdfUpload } from './payslip-pdf.util';
-
-/** MATRICULE_MM_AAAA.pdf (underscores entre segments). */
-const BULK_FILENAME_SEP = /^(.*)_(\d{2})_(\d{4})\.pdf$/i;
-/** Forme compacte : …MMYYYY.pdf (ex. EMP001032024.pdf). */
-const BULK_FILENAME_COMPACT = /^(.+)(\d{2})(\d{4})\.pdf$/i;
-
-function parseBulkFilename(name: string): {
-  matricule: string;
-  month: number;
-  year: number;
-} | null {
-  const sep = name.match(BULK_FILENAME_SEP);
-  if (sep) {
-    return {
-      matricule: sep[1].trim(),
-      month: Number.parseInt(sep[2], 10),
-      year: Number.parseInt(sep[3], 10),
-    };
-  }
-  const compact = name.match(BULK_FILENAME_COMPACT);
-  if (compact) {
-    return {
-      matricule: compact[1].replace(/_+$/u, '').trim(),
-      month: Number.parseInt(compact[2], 10),
-      year: Number.parseInt(compact[3], 10),
-    };
-  }
-  return null;
-}
 
 const userListSelect = {
   firstName: true,
   lastName: true,
   employeeId: true,
   department: true,
+  profilePhotoKey: true,
   orgDepartment: {
     select: {
       name: true,
@@ -65,10 +48,22 @@ export type PayslipWithUserList = Prisma.PayslipGetPayload<{
   include: { user: { select: typeof userListSelect } };
 }>;
 
-export type PayslipDetail = PayslipWithUserList & { presignedUrl: string };
+/** Utilisateur embarqué côté API (pas de clé S3, URL présignée pour l’avatar). */
+export type PayslipUserListClient = Omit<
+  PayslipWithUserList['user'],
+  'profilePhotoKey'
+> & { profilePhotoUrl: string | null };
+
+export type PayslipWithUserListClient = Omit<PayslipWithUserList, 'user'> & {
+  user: PayslipUserListClient;
+};
+
+export type PayslipDetailClient = PayslipWithUserListClient & {
+  presignedUrl: string;
+};
 
 export type PaginatedPayslips = {
-  data: PayslipWithUserList[];
+  data: PayslipWithUserListClient[];
   meta: {
     total: number;
     page: number;
@@ -82,6 +77,9 @@ export type BulkUploadDetail = {
   matricule: string;
   status: 'OK' | 'ERROR';
   reason?: string;
+  fileIndex?: number;
+  /** Échec technique (stockage / persistance) — peut être rejoué depuis l’admin. */
+  retryable?: boolean;
 };
 
 export type BulkUploadReport = {
@@ -90,6 +88,55 @@ export type BulkUploadReport = {
   failed: number;
   details: BulkUploadDetail[];
 };
+
+export type BulkAnalyzeRow = {
+  filename: string;
+  fileIndex: number;
+  extracted: {
+    matricule?: string;
+    firstName?: string;
+    lastName?: string;
+    fullName?: string;
+    periodMonth?: number;
+    periodYear?: number;
+    confidence: number;
+  };
+  match: {
+    userId?: string;
+    employeeName?: string;
+    employeeId?: string | null;
+    periodMonth?: number;
+    periodYear?: number;
+    matchMethod: 'matricule' | 'name' | 'filename' | 'unmatched';
+    confidence: number;
+  };
+  status: 'auto_matched' | 'needs_review' | 'unmatched';
+  duplicate: boolean;
+  duplicateReason?: 'database' | 'batch';
+  /** Texte affiché à l’étape de vérification (doublon base + conflit lot). */
+  duplicateMessage?: string;
+  /** PDF illisible ou rejet technique côté analyse. */
+  blockingError?: string;
+};
+
+function classifyBulkMatchStatus(
+  match: PayslipMatchResult,
+): 'auto_matched' | 'needs_review' | 'unmatched' {
+  if (!match.userId) {
+    return 'unmatched';
+  }
+  if (match.matchMethod === 'matricule') {
+    return 'auto_matched';
+  }
+  return 'needs_review';
+}
+
+function payslipKey(userId: string, month: number, year: number): string {
+  return `${userId}:${month}:${year}`;
+}
+
+/** Aligné sur la TTL des photos profil (GET /users). */
+const PAYSLIP_USER_PROFILE_PHOTO_URL_TTL_SEC = 7 * 24 * 3600;
 
 @Injectable()
 export class PayslipsService {
@@ -100,7 +147,50 @@ export class PayslipsService {
     private readonly storage: StorageService,
     private readonly users: UsersService,
     private readonly notifications: NotificationsService,
+    private readonly pdfExtractor: PayslipPdfExtractorService,
+    private readonly payslipMatcher: PayslipMatcherService,
+    private readonly bulkTempStore: PayslipBulkTempStore,
   ) {}
+
+  private async attachProfilePhotoUrlsToPayslips(
+    payslips: PayslipWithUserList[],
+  ): Promise<PayslipWithUserListClient[]> {
+    const uniqueKeys = [
+      ...new Set(
+        payslips
+          .map((p) => p.user.profilePhotoKey)
+          .filter((k): k is string => k != null && k !== ''),
+      ),
+    ];
+    const keyToUrl = new Map<string, string>();
+    await Promise.all(
+      uniqueKeys.map(async (key) => {
+        const url = await this.storage.getPresignedUrl(
+          key,
+          PAYSLIP_USER_PROFILE_PHOTO_URL_TTL_SEC,
+        );
+        keyToUrl.set(key, url);
+      }),
+    );
+    return payslips.map((p) => {
+      const { profilePhotoKey, ...userWithoutKey } = p.user;
+      const profilePhotoUrl =
+        profilePhotoKey != null && profilePhotoKey !== ''
+          ? (keyToUrl.get(profilePhotoKey) ?? null)
+          : null;
+      return {
+        ...p,
+        user: { ...userWithoutKey, profilePhotoUrl },
+      };
+    });
+  }
+
+  private async attachProfilePhotoUrlToPayslip(
+    payslip: PayslipWithUserList,
+  ): Promise<PayslipWithUserListClient> {
+    const [out] = await this.attachProfilePhotoUrlsToPayslips([payslip]);
+    return out!;
+  }
 
   async uploadSingle(
     file: Express.Multer.File,
@@ -108,7 +198,7 @@ export class PayslipsService {
     periodMonth: number,
     periodYear: number,
     adminUser: RequestUser,
-  ): Promise<PayslipWithUserList> {
+  ): Promise<PayslipWithUserListClient> {
     this.assertRhAdminWithCompany(adminUser);
 
     if (!isLikelyPdfUpload(file)) {
@@ -144,12 +234,18 @@ export class PayslipsService {
       periodMonth,
     );
     try {
-      await this.storage.uploadFile(file.buffer, key, 'application/pdf');
+      await this.storage.uploadFileWithRetry(
+        file.buffer,
+        key,
+        'application/pdf',
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Échec upload stockage S3: ${msg}`);
+      this.logger.warn(
+        `Échec upload stockage S3 après reprises : ${msg}`,
+      );
       throw new ServiceUnavailableException(
-        `Stockage S3/MinIO indisponible : ${msg}. Vérifiez que MinIO tourne (docker compose up -d minio), les variables S3_* dans backend/.env, et le bucket (ou ajoutez S3_ENSURE_BUCKET=true pour le créer au démarrage).`,
+        PAYSLIP_BULK_USER_MESSAGES.STORAGE_FAILED,
       );
     }
 
@@ -177,7 +273,14 @@ export class PayslipsService {
           'Un bulletin existe déjà pour cette période et ce collaborateur',
         );
       }
-      throw e;
+      const prismaMsg =
+        e instanceof Error ? e.message : String(e);
+      this.logger.warn(
+        `Échec création bulletin en base après upload S3 (rollback S3 effectué) : ${prismaMsg}`,
+      );
+      throw new BadRequestException(
+        PAYSLIP_BULK_USER_MESSAGES.PERSIST_FAILED,
+      );
     }
 
     await this.prisma.auditLog.create({
@@ -207,7 +310,278 @@ export class PayslipsService {
         );
       });
 
-    return created;
+    return this.attachProfilePhotoUrlToPayslip(created);
+  }
+
+  async analyzeBulk(
+    files: Express.Multer.File[],
+    adminUser: RequestUser,
+  ): Promise<{ batchId: string; analyses: BulkAnalyzeRow[] }> {
+    this.assertRhAdminWithCompany(adminUser);
+    const list = files ?? [];
+    const companyId = adminUser.companyId!;
+    const stored: PayslipBulkStoredFile[] = [];
+    const drafts: Omit<BulkAnalyzeRow, 'duplicate' | 'duplicateReason'>[] = [];
+
+    for (let i = 0; i < list.length; i += 1) {
+      const file = list[i]!;
+      const filename = file.originalname || `fichier-${i}.pdf`;
+
+      if (!isLikelyPdfUpload(file)) {
+        drafts.push({
+          filename,
+          fileIndex: i,
+          extracted: { confidence: 0 },
+          match: {
+            matchMethod: 'unmatched',
+            confidence: 0,
+          },
+          status: 'unmatched',
+          blockingError:
+            'Format non supporté — seuls les fichiers PDF sont acceptés',
+        });
+        stored.push({
+          fileIndex: i,
+          buffer: file.buffer,
+          originalname: filename,
+          mimetype: file.mimetype || 'application/pdf',
+          size: file.size,
+        });
+        continue;
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        const mo = (file.size / (1024 * 1024)).toFixed(1);
+        drafts.push({
+          filename,
+          fileIndex: i,
+          extracted: { confidence: 0 },
+          match: {
+            matchMethod: 'unmatched',
+            confidence: 0,
+          },
+          status: 'unmatched',
+          blockingError: `Fichier trop volumineux (${mo} Mo) — maximum 10 Mo`,
+        });
+        stored.push({
+          fileIndex: i,
+          buffer: file.buffer,
+          originalname: filename,
+          mimetype: file.mimetype || 'application/pdf',
+          size: file.size,
+        });
+        continue;
+      }
+
+      const extracted = await this.pdfExtractor.extractPayslipInfo(file.buffer);
+      if (!extracted.pdfReadable) {
+        drafts.push({
+          filename,
+          fileIndex: i,
+          extracted: { confidence: 0 },
+          match: {
+            matchMethod: 'unmatched',
+            confidence: 0,
+          },
+          status: 'unmatched',
+          blockingError:
+            'Le fichier PDF est illisible ou endommagé',
+        });
+        stored.push({
+          fileIndex: i,
+          buffer: file.buffer,
+          originalname: filename,
+          mimetype: file.mimetype || 'application/pdf',
+          size: file.size,
+        });
+        continue;
+      }
+
+      const match = await this.payslipMatcher.matchPayslipToEmployee(
+        extracted,
+        filename,
+        companyId,
+      );
+      const status = classifyBulkMatchStatus(match);
+
+      drafts.push({
+        filename,
+        fileIndex: i,
+        extracted: {
+          matricule: extracted.matricule,
+          firstName: extracted.firstName,
+          lastName: extracted.lastName,
+          fullName: extracted.fullName,
+          periodMonth: extracted.periodMonth,
+          periodYear: extracted.periodYear,
+          confidence: extracted.confidence,
+        },
+        match: {
+          userId: match.userId,
+          employeeName: match.employeeName,
+          employeeId: match.employeeId,
+          periodMonth: match.periodMonth,
+          periodYear: match.periodYear,
+          matchMethod: match.matchMethod,
+          confidence: match.confidence,
+        },
+        status,
+      });
+      stored.push({
+        fileIndex: i,
+        buffer: file.buffer,
+        originalname: filename,
+        mimetype: file.mimetype || 'application/pdf',
+        size: file.size,
+      });
+    }
+
+    const analyses = await this.applyDuplicateFlags(drafts, companyId);
+    const batchId = this.bulkTempStore.createSession(
+      companyId,
+      adminUser.id,
+      stored,
+    );
+    return { batchId, analyses };
+  }
+
+  async confirmBulk(
+    dto: {
+      batchId: string;
+      assignments: Array<{
+        fileIndex: number;
+        userId: string;
+        periodMonth: number;
+        periodYear: number;
+      }>;
+    },
+    adminUser: RequestUser,
+  ): Promise<BulkUploadReport> {
+    this.assertRhAdminWithCompany(adminUser);
+    const session = this.bulkTempStore.getSession(dto.batchId);
+    if (!session) {
+      throw new BadRequestException(
+        'Lot expiré ou introuvable. Relancez l’analyse des fichiers.',
+      );
+    }
+    if (session.companyId !== adminUser.companyId) {
+      throw new ForbiddenException();
+    }
+
+    const byIndex = new Map(session.files.map((f) => [f.fileIndex, f]));
+    const details: BulkUploadDetail[] = [];
+    let success = 0;
+    let failed = 0;
+
+    try {
+      for (const a of dto.assignments) {
+        const stored = byIndex.get(a.fileIndex);
+        const filename = stored?.originalname ?? `#${String(a.fileIndex)}`;
+
+        if (!stored) {
+          failed += 1;
+          details.push({
+            filename,
+            matricule: '—',
+            status: 'ERROR',
+            reason: 'Fichier absent du lot (index invalide)',
+            fileIndex: a.fileIndex,
+            retryable: false,
+          });
+          continue;
+        }
+
+        const file = this.storedFileToMulter(stored);
+        if (!isLikelyPdfUpload(file)) {
+          failed += 1;
+          details.push({
+            filename,
+            matricule: '—',
+            status: 'ERROR',
+            reason: 'Seuls les fichiers PDF sont acceptés',
+            fileIndex: a.fileIndex,
+            retryable: false,
+          });
+          continue;
+        }
+
+        const target = await this.prisma.user.findFirst({
+          where: { id: a.userId, companyId: adminUser.companyId },
+          select: { employeeId: true },
+        });
+        if (!target) {
+          failed += 1;
+          details.push({
+            filename,
+            matricule: '—',
+            status: 'ERROR',
+            reason: 'Collaborateur introuvable dans votre entreprise',
+            fileIndex: a.fileIndex,
+            retryable: false,
+          });
+          continue;
+        }
+
+        try {
+          await this.uploadSingle(
+            file,
+            a.userId,
+            a.periodMonth,
+            a.periodYear,
+            adminUser,
+          );
+          success += 1;
+          details.push({
+            filename,
+            matricule: target.employeeId?.trim() || '—',
+            status: 'OK',
+            fileIndex: a.fileIndex,
+          });
+        } catch (e) {
+          failed += 1;
+          const mat = target.employeeId?.trim() || '—';
+          let reason: string;
+          let retryable = false;
+          if (e instanceof ServiceUnavailableException) {
+            reason = PAYSLIP_BULK_USER_MESSAGES.STORAGE_FAILED;
+            retryable = true;
+          } else if (
+            e instanceof BadRequestException &&
+            e.message === PAYSLIP_BULK_USER_MESSAGES.PERSIST_FAILED
+          ) {
+            reason = PAYSLIP_BULK_USER_MESSAGES.PERSIST_FAILED;
+            retryable = true;
+          } else if (e instanceof ConflictException) {
+            reason = e.message;
+          } else if (e instanceof ForbiddenException) {
+            reason = 'Accès refusé';
+          } else if (e instanceof BadRequestException) {
+            reason = e.message;
+          } else if (e instanceof Error) {
+            reason = e.message;
+          } else {
+            reason = 'Erreur inconnue';
+          }
+          details.push({
+            filename,
+            matricule: mat,
+            status: 'ERROR',
+            reason,
+            fileIndex: a.fileIndex,
+            retryable,
+          });
+        }
+      }
+    } finally {
+      this.bulkTempStore.deleteSession(dto.batchId);
+    }
+
+    return {
+      total: dto.assignments.length,
+      success,
+      failed,
+      details,
+    };
   }
 
   async uploadBulk(
@@ -354,8 +728,9 @@ export class PayslipsService {
       }),
     ]);
 
+    const dataWithPhotos = await this.attachProfilePhotoUrlsToPayslips(data);
     return {
-      data,
+      data: dataWithPhotos,
       meta: {
         total,
         page,
@@ -365,7 +740,7 @@ export class PayslipsService {
     };
   }
 
-  async findOne(id: string, actor: RequestUser): Promise<PayslipDetail> {
+  async findOne(id: string, actor: RequestUser): Promise<PayslipDetailClient> {
     const payslip = await this.prisma.payslip.findUnique({
       where: { id },
       include: { user: { select: { ...userListSelect } } },
@@ -375,7 +750,8 @@ export class PayslipsService {
     }
     this.assertPayslipAccess(payslip, actor);
     const presignedUrl = await this.storage.getPresignedUrl(payslip.fileUrl);
-    return { ...payslip, presignedUrl };
+    const mapped = await this.attachProfilePhotoUrlToPayslip(payslip);
+    return { ...mapped, presignedUrl };
   }
 
   async getDownloadUrl(id: string, actor: RequestUser): Promise<string> {
@@ -387,7 +763,7 @@ export class PayslipsService {
     id: string,
     actor: RequestUser,
     client?: { ipAddress: string | null; userAgent: string | null },
-  ): Promise<PayslipWithUserList> {
+  ): Promise<PayslipWithUserListClient> {
     if (actor.role !== 'EMPLOYEE') {
       throw new ForbiddenException();
     }
@@ -429,7 +805,7 @@ export class PayslipsService {
       });
     }
 
-    return updated;
+    return this.attachProfilePhotoUrlToPayslip(updated);
   }
 
   async remove(id: string, actor: RequestUser): Promise<void> {
@@ -459,6 +835,164 @@ export class PayslipsService {
         } as Prisma.InputJsonValue,
       },
     });
+  }
+
+  private async applyDuplicateFlags(
+    drafts: Array<
+      Omit<BulkAnalyzeRow, 'duplicate' | 'duplicateReason' | 'duplicateMessage'>
+    >,
+    companyId: string,
+  ): Promise<BulkAnalyzeRow[]> {
+    const keyToSortedRows = new Map<
+      string,
+      Array<{ fileIndex: number; filename: string }>
+    >();
+
+    const completeTriples: Array<{
+      userId: string;
+      periodMonth: number;
+      periodYear: number;
+      k: string;
+      filename: string;
+      fileIndex: number;
+    }> = [];
+
+    for (const r of drafts) {
+      if (r.blockingError) {
+        continue;
+      }
+      const uid = r.match.userId;
+      const pm = r.match.periodMonth;
+      const py = r.match.periodYear;
+      if (uid == null || pm == null || py == null) {
+        continue;
+      }
+      const k = payslipKey(uid, pm, py);
+      completeTriples.push({
+        userId: uid,
+        periodMonth: pm,
+        periodYear: py,
+        k,
+        filename: r.filename,
+        fileIndex: r.fileIndex,
+      });
+      const list = keyToSortedRows.get(k) ?? [];
+      list.push({ fileIndex: r.fileIndex, filename: r.filename });
+      keyToSortedRows.set(k, list);
+    }
+
+    for (const rows of keyToSortedRows.values()) {
+      rows.sort((a, b) => a.fileIndex - b.fileIndex);
+    }
+
+    const batchKeyCounts = new Map<string, number>();
+    for (const t of completeTriples) {
+      batchKeyCounts.set(t.k, (batchKeyCounts.get(t.k) ?? 0) + 1);
+    }
+
+    const dbKeys = new Set<string>();
+    if (completeTriples.length > 0) {
+      const dedup = new Map<
+        string,
+        { userId: string; periodMonth: number; periodYear: number }
+      >();
+      for (const t of completeTriples) {
+        dedup.set(t.k, {
+          userId: t.userId,
+          periodMonth: t.periodMonth,
+          periodYear: t.periodYear,
+        });
+      }
+      const unique = [...dedup.values()];
+      const existing = await this.prisma.payslip.findMany({
+        where: {
+          companyId,
+          OR: unique.map((t) => ({
+            userId: t.userId,
+            periodMonth: t.periodMonth,
+            periodYear: t.periodYear,
+          })),
+        },
+        select: { userId: true, periodMonth: true, periodYear: true },
+      });
+      for (const p of existing) {
+        dbKeys.add(payslipKey(p.userId, p.periodMonth, p.periodYear));
+      }
+    }
+
+    return drafts.map((r) => {
+      if (r.blockingError) {
+        return { ...r, duplicate: false };
+      }
+
+      const uid = r.match.userId;
+      const pm = r.match.periodMonth;
+      const py = r.match.periodYear;
+      if (uid == null || pm == null || py == null) {
+        return { ...r, duplicate: false };
+      }
+
+      const k = payslipKey(uid, pm, py);
+      const batchDup = (batchKeyCounts.get(k) ?? 0) > 1;
+      const dbDup = dbKeys.has(k);
+      const duplicate = batchDup || dbDup;
+      let duplicateReason: 'database' | 'batch' | undefined;
+      if (duplicate) {
+        duplicateReason = batchDup ? 'batch' : 'database';
+      }
+
+      const msgs: string[] = [];
+      if (dbDup) {
+        msgs.push(
+          `Doublon — un bulletin de ${frenchMonthName(pm)} ${py} existe déjà pour ce collaborateur.`,
+        );
+      }
+      if (batchDup) {
+        const sorted = [...(keyToSortedRows.get(k) ?? [])].sort(
+          (a, b) => a.fileIndex - b.fileIndex,
+        );
+        const first = sorted[0];
+        if (sorted.length > 1 && first) {
+          if (r.fileIndex === first.fileIndex) {
+            const second = sorted[1]!;
+            msgs.push(
+              `Conflit — un autre fichier du lot (« ${second.filename} ») cible le même collaborateur et la même période.`,
+            );
+          } else {
+            msgs.push(
+              `Conflit — le fichier « ${r.filename} » cible le même collaborateur et la même période (doublon avec « ${first.filename} » dans ce lot).`,
+            );
+          }
+        }
+      }
+
+      const duplicateMessage =
+        msgs.length > 0 ? msgs.join(' ') : undefined;
+
+      return {
+        ...r,
+        duplicate,
+        duplicateReason,
+        duplicateMessage,
+      };
+    });
+  }
+
+  private storedFileToMulter(
+    stored: PayslipBulkStoredFile,
+  ): Express.Multer.File {
+    return {
+      fieldname: 'files',
+      originalname: stored.originalname,
+      encoding: '7bit',
+      mimetype: stored.mimetype,
+      buffer: stored.buffer,
+      size: stored.size,
+      destination: '',
+      filename: '',
+      path: '',
+      stream: undefined as never,
+    };
   }
 
   private assertRhAdminWithCompany(actor: RequestUser): void {

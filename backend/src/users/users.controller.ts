@@ -6,18 +6,23 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  MessageEvent,
   Param,
   Patch,
   Post,
   Query,
+  Sse,
   StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
   forwardRef,
 } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
+  ApiAcceptedResponse,
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiBody,
@@ -32,19 +37,32 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { Observable } from 'rxjs';
 import { AuthService } from '../auth/auth.service';
 import type { RequestUser } from '../auth/auth.types';
 import { InviteEmployeeDto } from '../auth/dto/invite-employee.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
+  BulkActivateDto,
+  BulkActivateResponseDto,
+  CommitImportBodyDto,
   CreateUserDto,
+  ImportResultDto,
   QueryUsersDto,
   UpdateUserDto,
   UserResponseDto,
+  ValidateImportBodyDto,
+  ValidateImportResponseDto,
 } from './dto';
+import { UserImportConfigDto } from './dto/user-import-config.dto';
 import { importEmployeesMulterOptions } from './users-import.multer';
+import { ProfilePhotoValidationPipe } from './pipes/profile-photo-file.pipe';
+import { profilePhotoMulterOptions } from './users-profile-photo.multer';
+import { buildEmployeeImportTemplateXlsx } from './users-import-template.workbook';
+import { UserImportJobService } from './user-import-job.service';
 import { UsersService } from './users.service';
 
 @ApiTags('Users')
@@ -54,9 +72,33 @@ import { UsersService } from './users.service';
 export class UsersController {
   constructor(
     private readonly users: UsersService,
+    private readonly importJobs: UserImportJobService,
     @Inject(forwardRef(() => AuthService))
     private readonly auth: AuthService,
   ) {}
+
+  private parseImportConfigOptional(
+    importConfigRaw: string | undefined,
+  ): UserImportConfigDto | undefined {
+    if (importConfigRaw == null || String(importConfigRaw).trim() === '') {
+      return undefined;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(String(importConfigRaw)) as unknown;
+    } catch {
+      throw new BadRequestException('importConfig : JSON invalide');
+    }
+    const dto = plainToInstance(UserImportConfigDto, parsed);
+    const errors = validateSync(dto, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+    if (errors.length > 0) {
+      throw new BadRequestException('importConfig : données invalides');
+    }
+    return dto;
+  }
 
   @Get()
   @Roles('RH_ADMIN', 'SUPER_ADMIN')
@@ -102,7 +144,9 @@ export class UsersController {
     description:
       'Prénom, nom, e-mail, département et poste. L’e-mail doit rester unique sur la plateforme.',
   })
-  @ApiOkResponse({ description: 'Profil mis à jour (utilisateur + entreprise)' })
+  @ApiOkResponse({
+    description: 'Profil mis à jour (utilisateur + entreprise)',
+  })
   @ApiUnauthorizedResponse()
   @ApiNotFoundResponse()
   @ApiConflictResponse({ description: 'E-mail déjà utilisé' })
@@ -112,6 +156,36 @@ export class UsersController {
     @Body() dto: UpdateUserDto,
   ) {
     return this.users.updateMe(actor, dto);
+  }
+
+  @Post('me/profile-photo')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('file', profilePhotoMulterOptions))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiOperation({
+    summary: 'Photo de profil (compte connecté)',
+    description:
+      'JPEG, PNG ou WebP, 2 Mo max. Remplace la photo existante ; visible côté RH sur la liste des collaborateurs.',
+  })
+  @ApiOkResponse({
+    description: 'Profil mis à jour (utilisateur + entreprise)',
+  })
+  @ApiUnauthorizedResponse()
+  @ApiBadRequestResponse({
+    description: 'Fichier manquant ou type / taille invalide',
+  })
+  async uploadMeProfilePhoto(
+    @CurrentUser() actor: RequestUser,
+    @UploadedFile(new ProfilePhotoValidationPipe()) file: Express.Multer.File,
+  ) {
+    return this.users.uploadProfilePhoto(actor, file);
   }
 
   @Post()
@@ -144,20 +218,24 @@ export class UsersController {
   @Get('import/template')
   @Roles('RH_ADMIN')
   @ApiOperation({
-    summary: 'Télécharger le modèle CSV d’import collaborateurs',
+    summary: 'Télécharger le modèle Excel d’import collaborateurs',
   })
-  @ApiProduces('text/csv')
-  @ApiOkResponse({ description: 'Fichier CSV avec en-têtes + ligne d’exemple' })
+  @ApiProduces(
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  @ApiOkResponse({
+    description:
+      'Classeur .xlsx (onglets Collaborateurs + Instructions, validation e-mail)',
+  })
   @ApiForbiddenResponse()
   @ApiUnauthorizedResponse()
-  downloadImportTemplate(): StreamableFile {
-    return new StreamableFile(
-      Buffer.from(UsersService.importTemplateCsv, 'utf-8'),
-      {
-        type: 'text/csv; charset=utf-8',
-        disposition: 'attachment; filename="import_template.csv"',
-      },
-    );
+  async downloadImportTemplate(): Promise<StreamableFile> {
+    const buffer = await buildEmployeeImportTemplateXlsx();
+    return new StreamableFile(buffer, {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      disposition:
+        'attachment; filename="PaySlip_Manager_Import_Template.xlsx"',
+    });
   }
 
   @Post('import')
@@ -168,7 +246,10 @@ export class UsersController {
   @ApiOperation({
     summary: 'Import en masse (CSV ou Excel)',
     description:
-      'Colonnes : matricule, prenom, nom, email, departement, poste. Une ligne en erreur n’empêche pas les autres.',
+      'Sans importConfig : détection automatique des colonnes. Avec importConfig (JSON string en multipart) : ' +
+      'mappings { matricule, prenom?, nom?, email, departement?, service?, poste? } = noms exacts des colonnes du fichier ; ' +
+      'splitFullName optionnel { column, separator: espace|virgule|tiret } ; rowIndices optionnel (indices 0-based). ' +
+      'Une ligne en erreur n’empêche pas les autres.',
   })
   @ApiBody({
     schema: {
@@ -180,6 +261,11 @@ export class UsersController {
           format: 'binary',
           description: 'Fichier .csv, .xls ou .xlsx (max 5 Mo)',
         },
+        importConfig: {
+          type: 'string',
+          description:
+            'JSON stringifié : { mappings, splitFullName?, rowIndices? }',
+        },
       },
     },
   })
@@ -188,10 +274,16 @@ export class UsersController {
     schema: {
       example: {
         total: 10,
-        created: 8,
+        created: 5,
+        updated: 3,
         errors: 2,
         errorDetails: [
-          { line: 3, matricule: 'EMP-1', reason: 'E-mail déjà utilisé' },
+          {
+            line: 3,
+            matricule: 'EMP-1',
+            reason:
+              'E-mail déjà utilisé par un autre collaborateur (matricule différent)',
+          },
         ],
       },
     },
@@ -203,12 +295,167 @@ export class UsersController {
   @ApiUnauthorizedResponse()
   async importEmployees(
     @UploadedFile() file: Express.Multer.File | undefined,
+    @Body('importConfig') importConfigRaw: string | undefined,
     @CurrentUser() admin: RequestUser,
   ) {
     if (!file?.buffer?.length) {
       throw new BadRequestException('Fichier requis');
     }
-    return this.users.importEmployees(file, admin);
+    const importConfig = this.parseImportConfigOptional(importConfigRaw);
+    return this.users.importEmployees(file, admin, importConfig);
+  }
+
+  @Post('import/validate')
+  @HttpCode(HttpStatus.OK)
+  @Roles('RH_ADMIN')
+  @ApiOperation({
+    summary: 'Valider un import collaborateurs (dry-run)',
+    description:
+      'Aucune écriture en base. Retourne un statut par ligne (prêt, mise à jour, erreur, avertissement).',
+  })
+  @ApiOkResponse({ type: ValidateImportResponseDto })
+  @ApiBadRequestResponse()
+  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse()
+  async validateImport(
+    @Body() body: ValidateImportBodyDto,
+    @CurrentUser() admin: RequestUser,
+  ): Promise<ValidateImportResponseDto> {
+    return this.users.validateImportRows(admin, body.rows);
+  }
+
+  @Post('import/commit')
+  @HttpCode(HttpStatus.OK)
+  @Roles('RH_ADMIN')
+  @ApiOperation({
+    summary: 'Importer des collaborateurs (JSON, après validation UI)',
+    description:
+      'Crée ou met à jour les lignes fournies. Rapport détaillé par ligne (créé, mis à jour, erreur).',
+  })
+  @ApiOkResponse({ type: ImportResultDto })
+  @ApiBadRequestResponse()
+  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse()
+  async commitImport(
+    @Body() body: CommitImportBodyDto,
+    @CurrentUser() admin: RequestUser,
+  ): Promise<ImportResultDto> {
+    return this.users.commitImportRows(admin, body.rows);
+  }
+
+  @Post('import/async')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @Roles('RH_ADMIN')
+  @UseInterceptors(FileInterceptor('file', importEmployeesMulterOptions))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Import en masse avec progression (SSE)',
+    description:
+      'Retourne immédiatement un jobId. Ouvrez GET /users/import/jobs/:jobId/events (flux SSE) pour la progression, puis le rapport final (événement done).',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Fichier .csv, .xls ou .xlsx (max 5 Mo)',
+        },
+        importConfig: {
+          type: 'string',
+          description:
+            'JSON stringifié : { mappings, splitFullName?, rowIndices? }',
+        },
+      },
+    },
+  })
+  @ApiAcceptedResponse({
+    description: 'Identifiant de job pour le flux SSE',
+    schema: { example: { jobId: '550e8400-e29b-41d4-a716-446655440000' } },
+  })
+  @ApiBadRequestResponse()
+  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse()
+  importEmployeesAsync(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body('importConfig') importConfigRaw: string | undefined,
+    @CurrentUser() admin: RequestUser,
+  ): { jobId: string } {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('Fichier requis');
+    }
+    const importConfig = this.parseImportConfigOptional(importConfigRaw);
+    const jobId = this.importJobs.createJob(admin);
+    void (async () => {
+      try {
+        const report = await this.users.importEmployees(
+          file,
+          admin,
+          importConfig,
+          {
+            onEvent: (e) => this.importJobs.pushEvent(jobId, e),
+          },
+        );
+        this.importJobs.finishSuccess(jobId, report);
+      } catch (e) {
+        this.importJobs.finishError(jobId, e);
+      }
+    })();
+    return { jobId };
+  }
+
+  @Get('import/jobs/:jobId/events')
+  @Sse()
+  @Roles('RH_ADMIN')
+  @ApiOperation({
+    summary: 'Flux SSE — progression import collaborateurs',
+    description:
+      'Événements JSON : parsing | start | progress | done | error. Authentification Bearer obligatoire.',
+  })
+  @ApiOkResponse({ description: 'text/event-stream' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  @ApiNotFoundResponse({ description: 'Job inconnu ou expiré' })
+  importJobEvents(
+    @Param('jobId') jobId: string,
+    @CurrentUser() user: RequestUser,
+  ): Observable<MessageEvent> {
+    return this.importJobs.stream(jobId, user);
+  }
+
+  @Get('activation/messaging-config')
+  @Roles('RH_ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Indique si l’envoi d’e-mails d’activation (SMTP) est configuré',
+  })
+  @ApiOkResponse({
+    schema: { example: { smtpConfigured: true } },
+  })
+  activationMessagingConfig(): { smtpConfigured: boolean } {
+    return { smtpConfigured: this.users.isActivationEmailConfigured() };
+  }
+
+  @Post('bulk-activate')
+  @HttpCode(HttpStatus.OK)
+  @Roles('RH_ADMIN')
+  @SkipThrottle()
+  @ApiOperation({
+    summary: 'Activer et inviter des collaborateurs en masse',
+    description:
+      'Mot de passe temporaire, option e-mail / PDF / aucun envoi, liens WhatsApp optionnels.',
+  })
+  @ApiOkResponse({ type: BulkActivateResponseDto })
+  @ApiBadRequestResponse()
+  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse()
+  bulkActivate(
+    @Body() dto: BulkActivateDto,
+    @CurrentUser() admin: RequestUser,
+  ): Promise<BulkActivateResponseDto> {
+    return this.users.bulkActivate(admin, dto);
   }
 
   @Get(':id')

@@ -40,11 +40,24 @@ export type AuthUserView = {
   lastName: string;
   role: UserRole;
   companyId: string | null;
+  mustChangePassword: boolean;
 };
 
 export type TokenPair = {
   accessToken: string;
   refreshToken: string;
+};
+
+/** Ligne prête pour invitation groupée (import masse). */
+export type BulkInviteEmployeeRow = {
+  email: string;
+  firstName: string;
+  lastName: string;
+  employeeId: string;
+  department: string | null;
+  departmentId: string | null;
+  serviceId: string | null;
+  position: string | null;
 };
 
 @Injectable()
@@ -146,12 +159,91 @@ export class AuthService {
       throw new UnauthorizedException('Identifiants invalides');
     }
 
+    if (
+      user.tempPasswordExpiresAt &&
+      new Date() > user.tempPasswordExpiresAt
+    ) {
+      throw new UnauthorizedException(
+        'Votre mot de passe temporaire a expiré. Contactez votre RH pour obtenir un nouveau lien d\'activation.',
+      );
+    }
+
     await this.prisma.auditLog.create({
       data: {
         userId: user.id,
         action: AUDIT.LOGIN_SUCCESS,
         entityType: 'User',
         entityId: user.id,
+      },
+    });
+
+    const tokens = await this.generateTokens(
+      user.id,
+      user.role,
+      user.email,
+      user.companyId,
+    );
+    await this.persistRefreshSession(user.id, tokens.refreshToken);
+
+    return {
+      user: this.toAuthUserView(user),
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    };
+  }
+
+  /**
+   * Connexion collaborateur (app mobile) : matricule + mot de passe.
+   * Réservé au rôle EMPLOYEE. Si le matricule existe dans plusieurs entreprises,
+   * la connexion est refusée (contacter les RH).
+   */
+  async loginEmployee(
+    employeeIdRaw: string,
+    password: string,
+  ): Promise<{ user: AuthUserView } & TokenPair> {
+    const trimmed = employeeIdRaw.trim();
+    if (!trimmed) {
+      throw new UnauthorizedException('Identifiants invalides');
+    }
+
+    const candidates =
+      await this.users.findActiveEmployeesByEmployeeIdInsensitive(trimmed);
+
+    if (candidates.length === 0) {
+      throw new UnauthorizedException('Identifiants invalides');
+    }
+
+    if (candidates.length > 1) {
+      throw new UnauthorizedException(
+        'Plusieurs comptes correspondent à ce matricule. Contactez les RH.',
+      );
+    }
+
+    const user = candidates[0];
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+
+    if (!valid) {
+      await this.recordFailedLogin(user);
+      throw new UnauthorizedException('Identifiants invalides');
+    }
+
+    if (
+      user.tempPasswordExpiresAt &&
+      new Date() > user.tempPasswordExpiresAt
+    ) {
+      throw new UnauthorizedException(
+        'Votre mot de passe temporaire a expiré. Contactez votre RH pour obtenir un nouveau lien d\'activation.',
+      );
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        action: AUDIT.LOGIN_SUCCESS,
+        entityType: 'User',
+        entityId: user.id,
+        metadata: { method: 'employee_matricule' } as Prisma.InputJsonValue,
       },
     });
 
@@ -260,6 +352,35 @@ export class AuthService {
         pepper,
       );
       const clash = await this.prisma.session.findFirst({
+        where: {
+          tokenHash,
+          deviceInfo: SESSION_DEVICE.INVITATION,
+          expiresAt: { gt: new Date() },
+        },
+        select: { id: true },
+      });
+      if (!clash) {
+        return code;
+      }
+    }
+    throw new ConflictException(
+      'Impossible d’émettre un code d’activation, veuillez réessayer',
+    );
+  }
+
+  private async issueUniqueActivationCodeTx(
+    tx: Prisma.TransactionClient,
+  ): Promise<string> {
+    const pepper = this.opaquePepper();
+    const maxAttempts = 64;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+      const tokenHash = hashOpaqueToken(
+        SESSION_DEVICE.INVITATION,
+        code,
+        pepper,
+      );
+      const clash = await tx.session.findFirst({
         where: {
           tokenHash,
           deviceInfo: SESSION_DEVICE.INVITATION,
@@ -388,6 +509,84 @@ export class AuthService {
   }
 
   /**
+   * Invitations groupées (import masse) : lots transactionnels, un seul hash bcrypt par lot.
+   * L’affectation org est déjà validée côté UsersService.
+   */
+  async createInvitedEmployeesBulk(
+    rows: BulkInviteEmployeeRow[],
+    inviter: RequestUser,
+    options?: { batchSize?: number; transactionTimeoutMs?: number },
+  ): Promise<void> {
+    if (rows.length === 0) {
+      return;
+    }
+    if (inviter.role !== 'RH_ADMIN') {
+      throw new ForbiddenException(
+        'Seul un administrateur RH peut inviter un collaborateur',
+      );
+    }
+    if (!inviter.companyId) {
+      throw new ForbiddenException(
+        'Compte administrateur sans entreprise associée',
+      );
+    }
+    const companyId = inviter.companyId;
+    const batchSize = Math.max(1, options?.batchSize ?? 50);
+    const transactionTimeoutMs = options?.transactionTimeoutMs ?? 120_000;
+    const pepper = this.opaquePepper();
+    const expiresAtBase = new Date();
+    expiresAtBase.setHours(expiresAtBase.getHours() + 72);
+
+    for (let i = 0; i < rows.length; i += batchSize) {
+      const slice = rows.slice(i, i + batchSize);
+      const tempPassword = crypto.randomBytes(32).toString('hex');
+      const passwordHash = await this.hashPassword(tempPassword);
+
+      await this.prisma.$transaction(
+        async (tx) => {
+          for (const dto of slice) {
+            const email = dto.email.toLowerCase();
+            const activationCode = await this.issueUniqueActivationCodeTx(tx);
+            const tokenHash = hashOpaqueToken(
+              SESSION_DEVICE.INVITATION,
+              activationCode,
+              pepper,
+            );
+            const user = await tx.user.create({
+              data: {
+                email,
+                firstName: dto.firstName,
+                lastName: dto.lastName,
+                employeeId: dto.employeeId,
+                department: dto.department,
+                departmentId: dto.departmentId,
+                serviceId: dto.serviceId,
+                position: dto.position,
+                role: 'EMPLOYEE',
+                companyId,
+                passwordHash,
+                isActive: false,
+              },
+            });
+            await tx.session.create({
+              data: {
+                userId: user.id,
+                tokenHash,
+                deviceInfo: SESSION_DEVICE.INVITATION,
+                expiresAt: expiresAtBase,
+              },
+            });
+          }
+        },
+        {
+          timeout: transactionTimeoutMs,
+          maxWait: 60_000,
+        },
+      );
+    }
+  }
+
+  /**
    * Émet un nouveau code d’activation (72 h) pour un collaborateur encore inactif.
    * Les codes précédents (même type) sont révoqués — le clair n’est jamais stocké en base.
    */
@@ -493,7 +692,12 @@ export class AuthService {
       await tx.session.delete({ where: { id: session.id } });
       return tx.user.update({
         where: { id: user.id },
-        data: { isActive: true, passwordHash },
+        data: {
+          isActive: true,
+          passwordHash,
+          mustChangePassword: false,
+          tempPasswordExpiresAt: null,
+        },
       });
     });
 
@@ -588,7 +792,11 @@ export class AuthService {
       await tx.session.delete({ where: { id: session.id } });
       await tx.user.update({
         where: { id: session.user.id },
-        data: { passwordHash },
+        data: {
+          passwordHash,
+          mustChangePassword: false,
+          tempPasswordExpiresAt: null,
+        },
       });
     });
 
@@ -614,7 +822,11 @@ export class AuthService {
     const passwordHash = await this.hashPassword(newPassword);
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash },
+      data: {
+        passwordHash,
+        mustChangePassword: false,
+        tempPasswordExpiresAt: null,
+      },
     });
     await this.prisma.auditLog.create({
       data: {
@@ -627,6 +839,45 @@ export class AuthService {
     return { message: 'Mot de passe mis à jour.' };
   }
 
+  /**
+   * Sessions de navigation (refresh JWT) encore valides pour cet utilisateur.
+   * Les lignes avec `deviceInfo` non nul (invitation, reset mot de passe, etc.) sont exclues.
+   */
+  async listMyRefreshSessions(actor: RequestUser) {
+    const now = new Date();
+    return this.prisma.session.findMany({
+      where: {
+        userId: actor.id,
+        expiresAt: { gt: now },
+        deviceInfo: null,
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        deviceInfo: true,
+        ipAddress: true,
+        createdAt: true,
+        expiresAt: true,
+      },
+    });
+  }
+
+  async revokeRefreshSession(
+    actor: RequestUser,
+    sessionId: string,
+  ): Promise<void> {
+    const removed = await this.prisma.session.deleteMany({
+      where: {
+        id: sessionId,
+        userId: actor.id,
+        deviceInfo: null,
+      },
+    });
+    if (removed.count === 0) {
+      throw new NotFoundException('Session introuvable ou déjà expirée');
+    }
+  }
+
   private toAuthUserView(user: User): AuthUserView {
     return {
       id: user.id,
@@ -635,6 +886,7 @@ export class AuthService {
       lastName: user.lastName,
       role: user.role,
       companyId: user.companyId,
+      mustChangePassword: user.mustChangePassword,
     };
   }
 

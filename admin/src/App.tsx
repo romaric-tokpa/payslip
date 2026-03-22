@@ -4,8 +4,6 @@ import { BrowserRouter } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { RouterConfig } from './router'
 
-const TEAL = '#0F5C5E'
-
 export default function App() {
   return (
     <BrowserRouter>
@@ -14,9 +12,12 @@ export default function App() {
           locale={frFR}
           theme={{
             token: {
-              colorPrimary: TEAL,
-              colorLink: TEAL,
+              colorPrimary: '#0F5C5E',
+              colorLink: '#0F5C5E',
               borderRadius: 8,
+              colorBgLayout: '#F4F6F6',
+              fontSize: 15,
+              fontSizeLG: 16,
             },
           }}
         >

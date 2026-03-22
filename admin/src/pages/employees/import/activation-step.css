@@ -1,0 +1,154 @@
+.activation-step-card {
+  margin-top: 20px;
+  border-radius: 12px;
+  border: 1px solid #e8e8e8;
+  overflow: hidden;
+}
+
+.activation-step-header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px 18px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.activation-step-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: #e8f5f5;
+  color: #0f5c5e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.activation-step-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #1c2833;
+}
+
+.activation-step-sub {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #7f8c8d;
+  line-height: 1.45;
+}
+
+.activation-step-body {
+  padding: 18px;
+  background: #fff;
+}
+
+.activation-send-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .activation-send-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.activation-send-card {
+  border: 1.5px solid #e8e8e8;
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  background: #fff;
+  text-align: left;
+  min-height: 120px;
+}
+
+.activation-send-card:hover:not(.activation-send-card--disabled) {
+  border-color: #0f5c5e;
+  box-shadow: 0 2px 8px rgba(15, 92, 94, 0.08);
+}
+
+.activation-send-card--selected {
+  border-color: #f28c28;
+  box-shadow: 0 0 0 1px rgba(242, 140, 40, 0.35);
+}
+
+.activation-send-card--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: #f4f6f6;
+}
+
+.activation-send-card__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1c2833;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.activation-send-card__desc {
+  font-size: 11px;
+  color: #7f8c8d;
+  line-height: 1.45;
+  margin-bottom: 8px;
+}
+
+.activation-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-right: 4px;
+  margin-top: 2px;
+}
+
+.activation-tag--green {
+  background: #eafaf1;
+  color: #27ae60;
+}
+
+.activation-tag--gray {
+  background: #f4f6f6;
+  color: #7f8c8d;
+}
+
+.activation-tag--orange {
+  background: #fef3e5;
+  color: #d35400;
+}
+
+.activation-preview-html {
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 360px;
+  overflow-y: auto;
+  background: #fff;
+}
+
+.activation-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.activation-btn-orange.ant-btn-primary {
+  background: #f28c28 !important;
+  border-color: #f28c28 !important;
+}
+
+.activation-btn-orange.ant-btn-primary:hover {
+  background: #e07d20 !important;
+  border-color: #e07d20 !important;
+}

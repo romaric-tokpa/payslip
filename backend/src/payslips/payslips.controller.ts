@@ -41,7 +41,9 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import {
+  BulkAnalyzeResponseDto,
   BulkUploadReportDto,
+  ConfirmBulkDto,
   PayslipDetailResponseDto,
   PayslipResponseDto,
   PaginatedPayslipsResponseDto,
@@ -145,6 +147,60 @@ export class PayslipsController {
     @CurrentUser() admin: RequestUser,
   ) {
     return this.payslips.uploadBulk(files ?? [], admin);
+  }
+
+  @Throttle(20, 60)
+  @Post('analyze-bulk')
+  @HttpCode(HttpStatus.OK)
+  @Roles('RH_ADMIN')
+  @UseInterceptors(FilesInterceptor('files', 500, payslipBulkMulterOptions))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Analyser un lot de bulletins PDF',
+    description:
+      'Extraction du texte, détection matricule / nom / période et matching collaborateur. Les fichiers sont conservés 30 minutes pour confirmation (confirm-bulk). Aucun envoi S3 ni écriture bulletin.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['files'],
+      properties: {
+        files: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+        },
+      },
+    },
+  })
+  @ApiOkResponse({ type: BulkAnalyzeResponseDto })
+  @ApiBadRequestResponse({ description: 'Requête invalide' })
+  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse()
+  async analyzeBulk(
+    @UploadedFiles() files: Express.Multer.File[],
+    @CurrentUser() admin: RequestUser,
+  ) {
+    return this.payslips.analyzeBulk(files ?? [], admin);
+  }
+
+  @Throttle(20, 60)
+  @Post('confirm-bulk')
+  @HttpCode(HttpStatus.OK)
+  @Roles('RH_ADMIN')
+  @ApiOperation({
+    summary: 'Confirmer et téléverser un lot analysé',
+    description:
+      'Utilise le batchId renvoyé par analyze-bulk et les affectations corrigées par le RH. Upload S3 + création bulletin + notifications.',
+  })
+  @ApiOkResponse({ type: BulkUploadReportDto })
+  @ApiBadRequestResponse({ description: 'Lot expiré ou payload invalide' })
+  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse()
+  async confirmBulk(
+    @Body() body: ConfirmBulkDto,
+    @CurrentUser() admin: RequestUser,
+  ) {
+    return this.payslips.confirmBulk(body, admin);
   }
 
   @Get()

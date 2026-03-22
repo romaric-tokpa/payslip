@@ -41,6 +41,11 @@ export class DashboardStatsResponseDto {
   @ApiProperty()
   activeEmployees: number;
 
+  @ApiProperty({
+    description: 'Nouveaux comptes collaborateurs créés ce mois (UTC)',
+  })
+  newEmployeesThisMonth: number;
+
   @ApiProperty()
   payslipsThisMonth: number;
 
@@ -48,6 +53,16 @@ export class DashboardStatsResponseDto {
     description: 'Pourcentage de bulletins lus (période = mois civil courant)',
   })
   consultationRate: number;
+
+  @ApiProperty({
+    description: 'Taux de lecture sur le mois civil précédent (UTC)',
+  })
+  consultationRatePreviousMonth: number;
+
+  @ApiProperty({
+    description: 'Écart en points de pourcentage vs mois précédent',
+  })
+  consultationRateDelta: number;
 
   @ApiProperty()
   unreadPayslips: number;

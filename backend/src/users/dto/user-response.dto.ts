@@ -33,9 +33,20 @@ export class UserResponseDto {
   @ApiProperty()
   isActive: boolean;
 
+  @ApiProperty({
+    description:
+      'Mot de passe temporaire : doit être changé à la prochaine connexion',
+  })
+  mustChangePassword: boolean;
+
   @ApiPropertyOptional()
   entryDate: Date | null;
 
   @ApiProperty()
   createdAt: Date;
+
+  @ApiPropertyOptional({
+    description: 'URL présignée pour afficher la photo (GET /users, /users/me, etc.)',
+  })
+  profilePhotoUrl?: string | null;
 }

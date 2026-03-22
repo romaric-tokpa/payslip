@@ -11,6 +11,10 @@ import { StorageService } from '../storage/storage.service';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PAYSLIP_AUDIT } from './payslips.constants';
+import { PayslipBulkTempStore } from './payslip-bulk-temp.store';
+import { PayslipMatcherService } from './payslip-matcher.service';
+import { PayslipPdfExtractorService } from './payslip-pdf-extractor.service';
+import { Readable } from 'stream';
 import { PayslipsService } from './payslips.service';
 
 function pdfFile(
@@ -28,7 +32,7 @@ function pdfFile(
     destination: '',
     filename: '',
     path: '',
-    stream: null as unknown as NodeJS.ReadableStream,
+    stream: Readable.from([]),
   };
 }
 
@@ -63,6 +67,7 @@ describe('PayslipsService', () => {
   let storage: {
     buildPayslipKey: jest.Mock;
     uploadFile: jest.Mock;
+    uploadFileWithRetry: jest.Mock;
     getPresignedUrl: jest.Mock;
     deleteFile: jest.Mock;
   };
@@ -112,6 +117,7 @@ describe('PayslipsService', () => {
           `companies/${companyId}/payslips/${userId}/${year}/${String(month).padStart(2, '0')}.pdf`,
       ),
       uploadFile: jest.fn().mockResolvedValue(undefined),
+      uploadFileWithRetry: jest.fn().mockResolvedValue(undefined),
       getPresignedUrl: jest
         .fn()
         .mockResolvedValue('https://signed.example/pdf'),
@@ -133,6 +139,9 @@ describe('PayslipsService', () => {
         { provide: StorageService, useValue: storage },
         { provide: UsersService, useValue: users },
         { provide: NotificationsService, useValue: notifications },
+        { provide: PayslipPdfExtractorService, useValue: {} },
+        { provide: PayslipMatcherService, useValue: {} },
+        { provide: PayslipBulkTempStore, useValue: {} },
       ],
     }).compile();
 
@@ -170,7 +179,7 @@ describe('PayslipsService', () => {
       const out = await service.uploadSingle(file, 'u-target', 3, 2024, rh);
 
       expect(out.id).toBe('ps-1');
-      expect(storage.uploadFile).toHaveBeenCalledWith(
+      expect(storage.uploadFileWithRetry).toHaveBeenCalledWith(
         file.buffer,
         'companies/co-1/payslips/u-target/2024/03.pdf',
         'application/pdf',
@@ -208,7 +217,7 @@ describe('PayslipsService', () => {
       await expect(
         service.uploadSingle(pdfFile('x.pdf'), 'other', 1, 2024, rh),
       ).rejects.toBeInstanceOf(ForbiddenException);
-      expect(storage.uploadFile).not.toHaveBeenCalled();
+      expect(storage.uploadFileWithRetry).not.toHaveBeenCalled();
     });
 
     it('doublon période → ConflictException', async () => {

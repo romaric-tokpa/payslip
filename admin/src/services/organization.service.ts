@@ -1,5 +1,15 @@
 import { api } from './api'
-import type { OrgDepartment, OrgDirection, OrgService } from '../types/organization'
+import type {
+  OrgChartResponse,
+  OrgDepartment,
+  OrgDirection,
+  OrgService,
+} from '../types/organization'
+
+export async function getOrgChart(): Promise<OrgChartResponse> {
+  const { data } = await api.get<OrgChartResponse>('/organization/chart')
+  return data
+}
 
 export async function listDirections(): Promise<OrgDirection[]> {
   const { data } = await api.get<OrgDirection[]>('/organization/directions')

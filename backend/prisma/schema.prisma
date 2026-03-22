@@ -98,8 +98,13 @@ model User {
   role         UserRole
   passwordHash String    @map("password_hash")
   isActive     Boolean   @default(true) @map("is_active")
+  /// Mot de passe temporaire (import / activation masse) : l’utilisateur doit le changer.
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  tempPasswordExpiresAt DateTime? @map("temp_password_expires_at")
   entryDate    DateTime? @map("entry_date")
   createdAt    DateTime  @default(now()) @map("created_at")
+  /// Clé objet S3 (companies/…/profiles/…), jamais l’URL brute.
+  profilePhotoKey String? @map("profile_photo_key")
 
   payslips           Payslip[]      @relation("PayslipOwner")
   uploadedPayslips   Payslip[]      @relation("PayslipUploader")

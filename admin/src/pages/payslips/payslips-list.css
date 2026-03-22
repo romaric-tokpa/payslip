@@ -1,0 +1,35 @@
+.payslips-by-month {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.payslips-by-month .ant-collapse {
+  background: transparent;
+}
+
+.payslips-by-month .ant-collapse-item {
+  border-radius: 10px !important;
+  border: 1px solid #e8e8e8 !important;
+  margin-bottom: 0;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.payslips-by-month .ant-collapse-header {
+  align-items: center !important;
+  padding: 12px 16px !important;
+  font-size: 15px;
+}
+
+.payslips-by-month .ant-collapse-content-box {
+  padding: 0 16px 16px !important;
+}
+
+.payslips-by-month .payslips-month-table .ant-table {
+  font-size: 14px;
+}
+
+.payslips-by-month .payslips-month-table .ant-table-thead > tr > th {
+  background: #f8f9fa !important;
+}

@@ -15,6 +15,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { OrganizationModule } from './organization/organization.module';
 import { PayslipsModule } from './payslips/payslips.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { EmailModule } from './email/email.module';
 import { StorageModule } from './storage/storage.module';
 import { UsersModule } from './users/users.module';
 
@@ -35,6 +36,7 @@ import { UsersModule } from './users/users.module';
       }),
     }),
     PrismaModule,
+    EmailModule,
     StorageModule,
     OrganizationModule,
     UsersModule,

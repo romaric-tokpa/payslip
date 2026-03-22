@@ -17,6 +17,7 @@ import { useCallback, useEffect, useState } from 'react'
 import * as orgApi from '../../services/organization.service'
 import type { OrgDepartment, OrgDirection, OrgService } from '../../types/organization'
 import { getApiErrorMessage } from '../../utils/apiErrorMessage'
+import { OrganizationOrgChartView } from './OrganizationOrgChartView'
 import '../employees/employees.css'
 
 const { Title } = Typography
@@ -396,6 +397,11 @@ export function OrganizationPage() {
 
       <Tabs
         items={[
+          {
+            key: 'chart',
+            label: 'Organigramme',
+            children: <OrganizationOrgChartView />,
+          },
           {
             key: 'directions',
             label: 'Directions',

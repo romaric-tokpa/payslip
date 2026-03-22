@@ -1,89 +1,165 @@
+.dashboard-page {
+  width: 100%;
+}
+
+.dashboard-error-alert {
+  margin-bottom: 16px;
+}
+
 .dashboard-spin-wrap {
-  min-height: 320px;
+  width: 100%;
 }
 
-.dashboard-kpi-grid {
+.dashboard-spin-inner {
+  min-height: 200px;
+}
+
+.dashboard-stat-grid {
   display: grid;
-  gap: 16px;
   grid-template-columns: repeat(4, 1fr);
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
-@media (max-width: 1199px) {
-  .dashboard-kpi-grid {
+@media (max-width: 1024px) {
+  .dashboard-stat-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 575px) {
-  .dashboard-kpi-grid {
+@media (max-width: 576px) {
+  .dashboard-stat-grid {
     grid-template-columns: 1fr;
   }
 }
 
-.dashboard-kpi-card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  border-left-width: 4px;
-  border-left-style: solid;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.dashboard-lower-grid {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 12px;
+  align-items: start;
 }
 
-.dashboard-kpi-card__head {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  min-height: 24px;
+@media (max-width: 992px) {
+  .dashboard-lower-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
-.dashboard-kpi-card__value {
-  font-size: 32px;
-  font-weight: 700;
-  line-height: 1.1;
-  color: rgba(0, 0, 0, 0.88);
+.dashboard-white-card {
+  border-radius: 10px !important;
+  border: 0.5px solid #e8e8e8 !important;
 }
 
-.dashboard-kpi-card__label {
-  font-size: 14px;
-  color: rgba(0, 0, 0, 0.45);
+.dashboard-white-card .ant-card-head {
+  border-bottom-color: #f0f0f0;
+  min-height: 48px;
 }
 
-.dashboard-chart-card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px 16px 8px;
-  margin-bottom: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.dashboard-chart-title {
+.dashboard-card-title {
   font-size: 16px;
   font-weight: 600;
-  margin: 0 0 16px 8px;
-  color: rgba(0, 0, 0, 0.85);
-}
-
-.dashboard-table-card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-.dashboard-table-title {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 0 0 16px 0;
-  color: rgba(0, 0, 0, 0.85);
+  color: #1c2833;
 }
 
 .dashboard-chart-wrap {
   width: 100%;
+}
+
+.dashboard-chart-tooltip {
+  background: #fff;
+  padding: 8px 12px;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.dashboard-chart-tooltip__title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #1c2833;
+}
+
+.dashboard-chart-tooltip__body {
+  color: rgba(0, 0, 0, 0.65);
+  font-size: 14px;
+}
+
+.dashboard-unread-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+}
+
+.dashboard-unread-see-all {
+  font-size: 14px;
+  font-weight: 500;
+  color: #f28c28;
+  line-height: 1.2;
+}
+
+.dashboard-unread-see-all:hover {
+  color: #d97a20;
+}
+
+.dashboard-unread-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dashboard-unread-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 0.5px solid #f0f0f0;
+}
+
+.dashboard-unread-item:last-child {
+  border-bottom: none;
+}
+
+.dashboard-unread-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #e8f5f5;
+  color: #0f5c5e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.dashboard-unread-meta {
+  flex: 1;
   min-width: 0;
-  height: 320px;
-  min-height: 320px;
+}
+
+.dashboard-unread-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1c2833;
+}
+
+.dashboard-unread-dept {
+  font-size: 12px;
+  color: #7f8c8d;
+  margin-top: 2px;
+}
+
+.dashboard-unread-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #fef3e5;
+  color: #f28c28;
+  flex-shrink: 0;
 }

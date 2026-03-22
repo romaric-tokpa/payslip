@@ -4,13 +4,22 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { StorageModule } from '../storage/storage.module';
 import { UsersModule } from '../users/users.module';
 import { PayslipFileValidationPipe } from './pipes/payslip-file.pipe';
+import { PayslipBulkTempStore } from './payslip-bulk-temp.store';
+import { PayslipMatcherService } from './payslip-matcher.service';
+import { PayslipPdfExtractorService } from './payslip-pdf-extractor.service';
 import { PayslipsController } from './payslips.controller';
 import { PayslipsService } from './payslips.service';
 
 @Module({
   imports: [PrismaModule, StorageModule, UsersModule, NotificationsModule],
   controllers: [PayslipsController],
-  providers: [PayslipsService, PayslipFileValidationPipe],
+  providers: [
+    PayslipsService,
+    PayslipFileValidationPipe,
+    PayslipPdfExtractorService,
+    PayslipMatcherService,
+    PayslipBulkTempStore,
+  ],
   exports: [PayslipsService],
 })
 export class PayslipsModule {}

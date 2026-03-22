@@ -11,6 +11,7 @@ import { OrganizationModule } from '../organization/organization.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { UsersModule } from '../users/users.module';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { MustChangePasswordGuard } from './guards/must-change-password.guard';
 import { RolesGuard } from './guards/roles.guard';
 
 @Module({
@@ -39,9 +40,18 @@ import { RolesGuard } from './guards/roles.guard';
     JwtStrategy,
     JwtAuthGuard,
     RolesGuard,
+    MustChangePasswordGuard,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: MustChangePasswordGuard },
     // Optionnel : ajouter `{ provide: APP_GUARD, useClass: RolesGuard }` pour appliquer `@Roles()` sans `@UseGuards(RolesGuard)`.
   ],
-  exports: [AuthService, JwtModule, PassportModule, JwtAuthGuard, RolesGuard],
+  exports: [
+    AuthService,
+    JwtModule,
+    PassportModule,
+    JwtAuthGuard,
+    RolesGuard,
+    MustChangePasswordGuard,
+  ],
 })
 export class AuthModule {}

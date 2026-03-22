@@ -27,6 +27,7 @@ import { CreateDirectionDto } from './dto/create-direction.dto';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { UpdateDirectionDto } from './dto/update-direction.dto';
+import { OrgChartResponseDto } from './dto/org-chart.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { OrganizationService } from './organization.service';
 
@@ -36,6 +37,20 @@ import { OrganizationService } from './organization.service';
 @Controller('organization')
 export class OrganizationController {
   constructor(private readonly organization: OrganizationService) {}
+
+  @Get('chart')
+  @Roles('RH_ADMIN')
+  @ApiOperation({
+    summary: 'Données pour organigramme',
+    description:
+      'Hiérarchie direction → département → services et collaborateurs actifs (EMPLOYEE).',
+  })
+  @ApiOkResponse({ type: OrgChartResponseDto })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
+  getOrgChart(@CurrentUser() actor: RequestUser) {
+    return this.organization.getOrgChart(actor);
+  }
 
   @Get('directions')
   @Roles('RH_ADMIN')
@@ -168,7 +183,9 @@ export class OrganizationController {
 
   @Post('services')
   @Roles('RH_ADMIN')
-  @ApiOperation({ summary: 'Créer un service (optionnellement rattaché à un département)' })
+  @ApiOperation({
+    summary: 'Créer un service (optionnellement rattaché à un département)',
+  })
   @ApiOkResponse()
   @ApiUnauthorizedResponse()
   @ApiForbiddenResponse()

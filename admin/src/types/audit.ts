@@ -34,8 +34,17 @@ export type GetAuditLogsParams = {
   page?: number
   limit?: number
   action?: string
-  entityType?: string
+  userId?: string
+  startDate?: string
+  endDate?: string
+  /** @deprecated Utiliser startDate / endDate ; conservé pour compat API */
   from?: string
   to?: string
+  entityType?: string
   search?: string
 }
+
+export type GetAuditLogsExportParams = Omit<
+  GetAuditLogsParams,
+  'page' | 'limit'
+>

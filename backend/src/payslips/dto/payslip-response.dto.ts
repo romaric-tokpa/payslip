@@ -12,6 +12,12 @@ export class PayslipUserSummaryDto {
 
   @ApiPropertyOptional({ nullable: true })
   department: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'URL présignée pour afficher la photo de profil du collaborateur',
+  })
+  profilePhotoUrl?: string | null;
 }
 
 export class PayslipResponseDto {
@@ -93,6 +99,16 @@ export class BulkUploadDetailDto {
 
   @ApiPropertyOptional()
   reason?: string;
+
+  @ApiPropertyOptional({
+    description: 'Index dans le lot analysé (pour réessai ciblé)',
+  })
+  fileIndex?: number;
+
+  @ApiPropertyOptional({
+    description: 'Échec stockage / persistance — peut être rejoué depuis l’admin',
+  })
+  retryable?: boolean;
 }
 
 export class BulkUploadReportDto {
@@ -104,6 +120,12 @@ export class BulkUploadReportDto {
 
   @ApiProperty()
   failed: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Fichiers retirés par le RH à l’étape de vérification (côté client)',
+  })
+  ignored?: number;
 
   @ApiProperty({ type: [BulkUploadDetailDto] })
   details: BulkUploadDetailDto[];

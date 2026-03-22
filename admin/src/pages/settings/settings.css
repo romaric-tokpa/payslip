@@ -1,0 +1,121 @@
+.settings-page-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+
+@media (max-width: 960px) {
+  .settings-page-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.settings-card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 16px;
+  border: 1px solid #e8e8e8;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.settings-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.settings-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.settings-card-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: #1c2833;
+}
+
+.settings-field-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #7f8c8d;
+  margin-bottom: 4px;
+  letter-spacing: 0.03em;
+}
+
+.settings-field-value {
+  font-size: 14px;
+  color: #1c2833;
+  background: #f4f6f6;
+  border-radius: 6px;
+  padding: 6px 10px;
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+}
+
+.settings-field-value--empty {
+  color: #bdc3c7;
+}
+
+.settings-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-card-actions {
+  margin-top: auto;
+  padding-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-org-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 0.5px solid #f4f6f6;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-org-row:last-child {
+  border-bottom: none;
+}
+
+.settings-org-row--disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.settings-sec-row {
+  padding: 12px 0;
+  border-bottom: 0.5px solid #f4f6f6;
+}
+
+.settings-sec-row:last-child {
+  border-bottom: none;
+}
+
+.settings-footer {
+  text-align: center;
+  font-size: 12px;
+  color: #bdc3c7;
+  margin-top: 16px;
+}

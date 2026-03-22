@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -31,19 +32,33 @@ export class QueryUsersDto {
   search?: string;
 
   @ApiPropertyOptional({
-    description: 'Filtre libellé département (texte historique, égalité exacte)',
+    description:
+      'Filtre libellé département (texte historique, égalité exacte)',
   })
   @IsOptional()
   @IsString()
   department?: string;
 
-  @ApiPropertyOptional({ description: 'Filtre par département (UUID structure)' })
+  @ApiPropertyOptional({
+    description: 'Filtre par département (UUID structure)',
+  })
   @IsOptional()
   @IsUUID('4')
   departmentId?: string;
 
-  @ApiPropertyOptional({ description: 'Filtre par direction (UUID) via le département' })
+  @ApiPropertyOptional({
+    description: 'Filtre par direction (UUID) via le département',
+  })
   @IsOptional()
   @IsUUID('4')
   directionId?: string;
+
+  @ApiPropertyOptional({
+    enum: ['all', 'active', 'inactive', 'pending_password'],
+    description:
+      'Statut d’activation : actifs (compte actif et MDP définitif), inactifs, en attente de changement de MDP',
+  })
+  @IsOptional()
+  @IsIn(['all', 'active', 'inactive', 'pending_password'])
+  activationStatus?: 'all' | 'active' | 'inactive' | 'pending_password';
 }

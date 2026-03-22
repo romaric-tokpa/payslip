@@ -1,5 +1,5 @@
-import { InboxOutlined } from '@ant-design/icons'
-import { App, Button, Form, Select, Spin, Upload } from 'antd'
+import { FilePdfOutlined } from '@ant-design/icons'
+import { App, Button, Card, Form, Select, Spin, Upload } from 'antd'
 import type { UploadFile } from 'antd/es/upload/interface'
 import { useCallback, useEffect, useState } from 'react'
 import * as employeesApi from '../../services/employees.service'
@@ -12,6 +12,7 @@ import {
   formatEmployeeOption,
   yearOptions,
 } from './payslipUploadConstants'
+import './payslip-upload.css'
 
 type SingleFormValues = {
   userId: string
@@ -101,86 +102,109 @@ export function SingleUploadTab() {
   const years = yearOptions()
 
   return (
-    <Form
-      form={form}
-      layout="vertical"
-      requiredMark={false}
-      style={{ maxWidth: 560 }}
-    >
-      <Form.Item
-        name="userId"
-        label="Collaborateur"
-        rules={[{ required: true, message: 'Sélectionnez un collaborateur' }]}
+    <Card className="payslip-single-card" variant="outlined">
+      <Form
+        form={form}
+        layout="vertical"
+        requiredMark={false}
+        style={{ width: '100%' }}
       >
-        <Select
-          showSearch
-          filterOption={false}
-          placeholder="Rechercher par matricule, nom ou prénom…"
-          options={options}
-          loading={optionsLoading}
-          onSearch={setSearchInput}
-          notFoundContent={
-            optionsLoading ? <Spin size="small" /> : 'Aucun résultat'
-          }
-        />
-      </Form.Item>
-      <Form.Item
-        name="periodMonth"
-        label="Mois"
-        rules={[{ required: true, message: 'Mois requis' }]}
-      >
-        <Select
-          placeholder="Mois"
-          options={MONTHS_FR.map((label, i) => ({
-            value: i + 1,
-            label,
-          }))}
-        />
-      </Form.Item>
-      <Form.Item
-        name="periodYear"
-        label="Année"
-        rules={[{ required: true, message: 'Année requise' }]}
-      >
-        <Select
-          placeholder="Année"
-          options={years.map((y) => ({ value: y, label: String(y) }))}
-        />
-      </Form.Item>
-      <Form.Item label="Fichier PDF" required>
-        <Upload.Dragger
-          accept=".pdf,application/pdf"
-          maxCount={1}
-          fileList={fileList}
-          beforeUpload={(file) => {
-            if (file.size > MAX_PDF_BYTES) {
-              message.warning('Le fichier ne doit pas dépasser 10 Mo')
-              return Upload.LIST_IGNORE
-            }
-            if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
-              message.warning('Seuls les fichiers PDF sont acceptés')
-              return Upload.LIST_IGNORE
-            }
-            return false
-          }}
-          onChange={({ fileList: fl }) => setFileList(fl)}
-          onRemove={() => setFileList([])}
-        >
-          <p className="ant-upload-drag-icon">
-            <InboxOutlined />
-          </p>
-          <p className="ant-upload-text">PDF uniquement, 10 Mo max</p>
-        </Upload.Dragger>
-      </Form.Item>
-      <Form.Item>
-        <Button
-          type="primary"
-          loading={uploading}
-          onClick={() => void onSubmit()}
-        >
-          Uploader le bulletin
-        </Button>
-      </Form.Item>
-    </Form>
+        <div className="payslip-single-grid">
+          <div>
+            <Form.Item
+              className="payslip-form-item"
+              name="userId"
+              label="Collaborateur"
+              rules={[{ required: true, message: 'Sélectionnez un collaborateur' }]}
+            >
+              <Select
+                showSearch
+                filterOption={false}
+                placeholder="Rechercher par matricule, nom ou prénom…"
+                options={options}
+                loading={optionsLoading}
+                onSearch={setSearchInput}
+                notFoundContent={
+                  optionsLoading ? <Spin size="small" /> : 'Aucun résultat'
+                }
+                popupMatchSelectWidth={false}
+              />
+            </Form.Item>
+            <Form.Item
+              className="payslip-form-item"
+              name="periodMonth"
+              label="Mois"
+              rules={[{ required: true, message: 'Mois requis' }]}
+            >
+              <Select
+                placeholder="Mois"
+                options={MONTHS_FR.map((label, i) => ({
+                  value: i + 1,
+                  label,
+                }))}
+              />
+            </Form.Item>
+            <Form.Item
+              className="payslip-form-item"
+              name="periodYear"
+              label="Année"
+              rules={[{ required: true, message: 'Année requise' }]}
+            >
+              <Select
+                placeholder="Année"
+                options={years.map((y) => ({ value: y, label: String(y) }))}
+              />
+            </Form.Item>
+          </div>
+          <div>
+            <Form.Item
+              className="payslip-form-item"
+              label="Fichier PDF"
+              required
+            >
+              <div className="payslip-single-drop">
+                <Upload.Dragger
+                  accept=".pdf,application/pdf"
+                  maxCount={1}
+                  fileList={fileList}
+                  beforeUpload={(file) => {
+                    if (file.size > MAX_PDF_BYTES) {
+                      message.warning('Le fichier ne doit pas dépasser 10 Mo')
+                      return Upload.LIST_IGNORE
+                    }
+                    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+                      message.warning('Seuls les fichiers PDF sont acceptés')
+                      return Upload.LIST_IGNORE
+                    }
+                    return false
+                  }}
+                  onChange={({ fileList: fl }) => setFileList(fl)}
+                  onRemove={() => setFileList([])}
+                >
+                  <div className="payslip-single-drop-inner">
+                    <FilePdfOutlined className="payslip-single-pdf-icon" />
+                    <div className="payslip-single-drop-title">
+                      Déposez le bulletin PDF ici
+                    </div>
+                    <div className="payslip-single-drop-sub">10 Mo max</div>
+                  </div>
+                </Upload.Dragger>
+              </div>
+            </Form.Item>
+          </div>
+        </div>
+        <Form.Item style={{ marginBottom: 0, marginTop: 8 }}>
+          <Button
+            type="primary"
+            block
+            loading={uploading}
+            onClick={() => void onSubmit()}
+            className="payslip-btn-teal"
+          >
+            Uploader le bulletin
+          </Button>
+        </Form.Item>
+      </Form>
+    </Card>
   )
 }

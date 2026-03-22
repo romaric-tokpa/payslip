@@ -28,10 +28,18 @@ export const userPublicSelect = {
   position: true,
   role: true,
   isActive: true,
+  mustChangePassword: true,
   entryDate: true,
   createdAt: true,
+  profilePhotoKey: true,
 } satisfies Prisma.UserSelect;
 
-export type UserPublic = Prisma.UserGetPayload<{
+/** Ligne Prisma (contient la clé S3 interne). */
+export type UserPublicRow = Prisma.UserGetPayload<{
   select: typeof userPublicSelect;
 }>;
+
+/** Réponse API : URL présignée à la place de la clé. */
+export type UserPublicClient = Omit<UserPublicRow, 'profilePhotoKey'> & {
+  profilePhotoUrl: string | null;
+};

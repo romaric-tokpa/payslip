@@ -1,9 +1,10 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, StreamableFile, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiForbiddenResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiProduces,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -17,9 +18,37 @@ import { QueryAuditLogsDto } from './dto/query-audit-logs.dto';
 @ApiTags('Audit')
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Controller('audit-logs')
+@Controller('audit')
 export class AuditController {
   constructor(private readonly audit: AuditService) {}
+
+  @Get('actions')
+  @Roles('RH_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({
+    summary: 'Liste des types d’action présents dans le journal (périmètre entreprise)',
+  })
+  @ApiOkResponse({ description: 'Codes d’action distincts, triés' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse({ description: 'Rôle non autorisé' })
+  async listActions(@CurrentUser() actor: RequestUser): Promise<string[]> {
+    return this.audit.listDistinctActions(actor);
+  }
+
+  @Get('export')
+  @Roles('RH_ADMIN', 'SUPER_ADMIN')
+  @ApiOperation({
+    summary: 'Export CSV des logs (mêmes filtres que la liste, max 10 000 lignes)',
+  })
+  @ApiProduces('text/csv')
+  @ApiOkResponse({ description: 'Fichier CSV UTF-8 avec BOM' })
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse({ description: 'Rôle non autorisé' })
+  async export(
+    @Query() query: QueryAuditLogsDto,
+    @CurrentUser() actor: RequestUser,
+  ): Promise<StreamableFile> {
+    return this.audit.exportCsvStream(actor, query);
+  }
 
   @Get()
   @Roles('RH_ADMIN', 'SUPER_ADMIN')

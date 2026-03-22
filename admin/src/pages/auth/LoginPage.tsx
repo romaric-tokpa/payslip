@@ -71,9 +71,18 @@ export function LoginPage() {
       <Card
         style={{ width: '100%', maxWidth: 400, boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}
       >
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <img
+            src="/app_icon.svg"
+            alt=""
+            width={72}
+            height={72}
+            style={{ borderRadius: 18, display: 'inline-block' }}
+          />
+        </div>
         <Typography.Title
           level={3}
-          style={{ textAlign: 'center', color: TEAL, marginBottom: 28 }}
+          style={{ textAlign: 'center', color: TEAL, marginBottom: 28, marginTop: 0 }}
         >
           PaySlip Manager
         </Typography.Title>

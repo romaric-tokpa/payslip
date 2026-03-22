@@ -17,8 +17,11 @@ export type TopUnreadRow = {
 export type DashboardStats = {
   totalEmployees: number
   activeEmployees: number
+  newEmployeesThisMonth: number
   payslipsThisMonth: number
   consultationRate: number
+  consultationRatePreviousMonth: number
+  consultationRateDelta: number
   unreadPayslips: number
   monthlyUploads: MonthlyUploadStat[]
   topUnread: TopUnreadRow[]

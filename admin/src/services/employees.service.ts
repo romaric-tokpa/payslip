@@ -1,14 +1,25 @@
 import { AxiosHeaders } from 'axios'
-import { api } from './api'
+import { getApiBaseUrl } from '../config/env'
 import type {
+  ActivationMessagingConfig,
+  BulkActivateDto,
+  BulkActivateResponse,
   CreateEmployeePayload,
   EmployeeUser,
   GetEmployeesParams,
   ImportEmployeesReport,
+  ImportProgressEvent,
+  ImportResultDetail,
+  ImportResultDto,
+  ImportRowDto,
   InviteEmployeeResponse,
   PaginatedEmployeesResponse,
   UpdateEmployeePayload,
+  UserImportConfigPayload,
+  ValidateImportResponse,
 } from '../types/employees'
+import { api } from './api'
+import { getAccessTokenFromStore } from './authStorage'
 
 function toQuery(params: GetEmployeesParams): Record<string, string | number> {
   const q: Record<string, string | number> = {}
@@ -24,6 +35,9 @@ function toQuery(params: GetEmployeesParams): Record<string, string | number> {
   if (params.directionId != null && params.directionId !== '') {
     q.directionId = params.directionId
   }
+  if (params.activationStatus != null && params.activationStatus !== 'all') {
+    q.activationStatus = params.activationStatus
+  }
   return q
 }
 
@@ -38,6 +52,24 @@ export async function getEmployees(
 
 export async function getEmployeeById(id: string): Promise<EmployeeUser> {
   const { data } = await api.get<EmployeeUser>(`/users/${id}`)
+  return data
+}
+
+export async function getActivationMessagingConfig(): Promise<ActivationMessagingConfig> {
+  const { data } = await api.get<ActivationMessagingConfig>(
+    '/users/activation/messaging-config',
+  )
+  return data
+}
+
+export async function bulkActivate(
+  body: BulkActivateDto,
+): Promise<BulkActivateResponse> {
+  const { data } = await api.post<BulkActivateResponse>(
+    '/users/bulk-activate',
+    body,
+    { timeout: 300_000 },
+  )
   return data
 }
 
@@ -76,19 +108,223 @@ export async function reactivateEmployee(id: string): Promise<EmployeeUser> {
   return data
 }
 
-export async function importEmployees(
+function importFormData(
   file: File,
-): Promise<ImportEmployeesReport> {
+  importConfig?: UserImportConfigPayload,
+): FormData {
   const formData = new FormData()
   formData.append('file', file)
+  if (importConfig !== undefined) {
+    formData.append('importConfig', JSON.stringify(importConfig))
+  }
+  return formData
+}
+
+function importMultipartHeaders(): AxiosHeaders {
   const headers = new AxiosHeaders()
   headers.delete('Content-Type')
-  const { data } = await api.post<ImportEmployeesReport>(
-    '/users/import',
-    formData,
-    { headers },
+  return headers
+}
+
+/** Démarre un import asynchrone ; consommer le flux avec `streamImportEmployeesJob`. */
+export async function startImportEmployeesAsync(
+  file: File,
+  importConfig?: UserImportConfigPayload,
+): Promise<{ jobId: string }> {
+  const { data } = await api.post<{ jobId: string }>(
+    '/users/import/async',
+    importFormData(file, importConfig),
+    { headers: importMultipartHeaders(), timeout: 300_000 },
   )
   return data
+}
+
+/**
+ * Lit le flux SSE (fetch + Authorization) jusqu’à l’événement `done` ou `error`.
+ */
+export async function streamImportEmployeesJob(
+  jobId: string,
+  onEvent: (e: ImportProgressEvent) => void,
+  signal?: AbortSignal,
+): Promise<ImportEmployeesReport> {
+  const token = getAccessTokenFromStore()
+  if (!token) {
+    throw new Error('Session expirée : reconnectez-vous')
+  }
+  const url = `${getApiBaseUrl()}/users/import/jobs/${encodeURIComponent(jobId)}/events`
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(
+      text || `Flux de progression indisponible (${res.status})`,
+    )
+  }
+  const reader = res.body?.getReader()
+  if (!reader) {
+    throw new Error('Réponse sans corps (flux SSE)')
+  }
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let doneReport: ImportEmployeesReport | null = null
+
+  const flushBlocks = (flushAll: boolean) => {
+    buffer = buffer.replace(/\r\n/g, '\n')
+    const sep = '\n\n'
+    let idx = buffer.indexOf(sep)
+    while (idx !== -1) {
+      const block = buffer.slice(0, idx)
+      buffer = buffer.slice(idx + sep.length)
+      for (const line of block.split('\n')) {
+        const t = line.trim()
+        if (t.startsWith('data:')) {
+          const json = t.slice(5).trim()
+          if (json) {
+            const ev = JSON.parse(json) as ImportProgressEvent
+            onEvent(ev)
+            if (ev.kind === 'done') {
+              doneReport = ev.report
+            }
+            if (ev.kind === 'error') {
+              throw new Error(ev.message)
+            }
+          }
+        }
+      }
+      idx = buffer.indexOf(sep)
+    }
+    if (flushAll && buffer.trim()) {
+      for (const line of buffer.split('\n')) {
+        const t = line.trim()
+        if (t.startsWith('data:')) {
+          const json = t.slice(5).trim()
+          if (json) {
+            const ev = JSON.parse(json) as ImportProgressEvent
+            onEvent(ev)
+            if (ev.kind === 'done') {
+              doneReport = ev.report
+            }
+            if (ev.kind === 'error') {
+              throw new Error(ev.message)
+            }
+          }
+        }
+      }
+      buffer = ''
+    }
+  }
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (value) {
+        buffer += decoder.decode(value, { stream: true })
+        flushBlocks(false)
+      }
+      if (done) {
+        flushBlocks(true)
+        break
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+
+  if (!doneReport) {
+    throw new Error('Import interrompu sans rapport final')
+  }
+  return doneReport
+}
+
+/** Enchaîne POST async + flux SSE (progression temps réel jusqu’au rapport). */
+export async function importEmployeesWithLiveProgress(
+  file: File,
+  importConfig: UserImportConfigPayload | undefined,
+  onEvent: (e: ImportProgressEvent) => void,
+  signal?: AbortSignal,
+): Promise<ImportEmployeesReport> {
+  const { jobId } = await startImportEmployeesAsync(file, importConfig)
+  return streamImportEmployeesJob(jobId, onEvent, signal)
+}
+
+/** Import synchrone classique (sans progression temps réel). */
+export async function importEmployees(
+  file: File,
+  importConfig?: UserImportConfigPayload,
+): Promise<ImportEmployeesReport> {
+  const { data } = await api.post<ImportEmployeesReport>(
+    '/users/import',
+    importFormData(file, importConfig),
+    { headers: importMultipartHeaders(), timeout: 300_000 },
+  )
+  return data
+}
+
+function csvEscapeCell(s: string): string {
+  const t = String(s ?? '').replace(/"/g, '""')
+  return `"${t}"`
+}
+
+export async function validateImport(
+  rows: ImportRowDto[],
+): Promise<ValidateImportResponse> {
+  const { data } = await api.post<ValidateImportResponse>(
+    '/users/import/validate',
+    { rows },
+    { timeout: 120_000 },
+  )
+  return data
+}
+
+export async function commitImportEmployees(
+  rows: ImportRowDto[],
+): Promise<ImportResultDto> {
+  const { data } = await api.post<ImportResultDto>(
+    '/users/import/commit',
+    { rows },
+    { timeout: 300_000 },
+  )
+  return data
+}
+
+export function exportErrorsCsv(details: ImportResultDetail[]): void {
+  const lines = [
+    'Ligne,Email,Matricule,Erreur',
+    ...details
+      .filter((d) => d.status === 'error')
+      .map(
+        (e) =>
+          `${e.rowIndex + 2},${csvEscapeCell(e.email)},${csvEscapeCell(e.employeeId ?? '')},${csvEscapeCell(e.errorMessage ?? '')}`,
+      ),
+  ]
+  const csv = lines.join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `erreurs_import_${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export function exportImportReportCsv(result: ImportResultDto): void {
+  const lines = [
+    'Ligne,Email,Matricule,Statut,Message',
+    ...result.details.map(
+      (d) =>
+        `${d.rowIndex + 2},${csvEscapeCell(d.email)},${csvEscapeCell(d.employeeId ?? '')},${csvEscapeCell(d.status)},${csvEscapeCell(d.errorMessage ?? '')}`,
+    ),
+  ]
+  const csv = lines.join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `rapport_import_${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 export async function downloadTemplate(): Promise<void> {
@@ -98,7 +334,7 @@ export async function downloadTemplate(): Promise<void> {
   const url = URL.createObjectURL(data)
   const a = document.createElement('a')
   a.href = url
-  a.download = 'import_template.csv'
+  a.download = 'PaySlip_Manager_Import_Template.xlsx'
   document.body.appendChild(a)
   a.click()
   a.remove()

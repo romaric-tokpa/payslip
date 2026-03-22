@@ -1,12 +1,20 @@
-import { DeleteOutlined, EyeOutlined, UploadOutlined } from '@ant-design/icons'
+import {
+  DeleteOutlined,
+  EyeOutlined,
+  PartitionOutlined,
+  TableOutlined,
+  UploadOutlined,
+} from '@ant-design/icons'
 import {
   App,
+  Avatar,
   Button,
+  Collapse,
+  Segmented,
   Select,
   Space,
   Table,
   Tag,
-  Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
@@ -16,6 +24,7 @@ import * as employeesApi from '../services/employees.service'
 import * as payslipsApi from '../services/payslips.service'
 import type { EmployeeUser } from '../types/employees'
 import type { Payslip } from '../types/payslips'
+import { PageHeader } from '../components/PageHeader'
 import { getApiErrorMessage } from '../utils/apiErrorMessage'
 import {
   MONTHS_FR,
@@ -23,14 +32,46 @@ import {
   yearOptions,
 } from './payslips/payslipUploadConstants'
 import './employees/employees.css'
+import './payslips/payslips-list.css'
+import { PayslipsKanban } from './payslips/PayslipsKanban'
 
-const { Title } = Typography
 const TEAL = '#0F5C5E'
+
+type PayslipsViewMode = 'list' | 'kanban'
+
+/** Taille de page API pour tout charger avant regroupement par mois de paie. */
+const FETCH_PAGE_SIZE = 100
+const MAX_FETCH_PAGES = 40
+
+function payslipUserInitials(u: Payslip['user']): string {
+  const a = u.firstName?.trim()?.[0] ?? ''
+  const b = u.lastName?.trim()?.[0] ?? ''
+  const pair = `${b}${a}`.toUpperCase()
+  return pair.length > 0 ? pair : '?'
+}
 
 function formatFileSize(n: number): string {
   if (n < 1024) return `${n} o`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} Ko`
   return `${(n / (1024 * 1024)).toFixed(1)} Mo`
+}
+
+function periodSortKey(year: number, month: number): number {
+  return year * 100 + month
+}
+
+function formatPayPeriodTitle(month: number, year: number): string {
+  const label = MONTHS_FR[month - 1] ?? String(month)
+  const cap = label.charAt(0).toUpperCase() + label.slice(1)
+  return `${cap} ${year}`
+}
+
+type MonthGroup = {
+  sortKey: number
+  periodMonth: number
+  periodYear: number
+  title: string
+  rows: Payslip[]
 }
 
 const MONTH_OPTIONS = MONTHS_FR.map((label, i) => ({
@@ -44,13 +85,12 @@ export function PayslipsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const filterUserId = searchParams.get('userId') || undefined
 
-  const [page, setPage] = useState(1)
-  const [limit, setLimit] = useState(20)
   const [year, setYear] = useState<number | undefined>(undefined)
   const [month, setMonth] = useState<number | undefined>(undefined)
 
   const [dataSource, setDataSource] = useState<Payslip[]>([])
   const [total, setTotal] = useState(0)
+  const [truncated, setTruncated] = useState(false)
   const [listLoading, setListLoading] = useState(true)
 
   const [searchInput, setSearchInput] = useState('')
@@ -65,6 +105,7 @@ export function PayslipsPage() {
   } | null>(null)
 
   const [openingId, setOpeningId] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<PayslipsViewMode>('list')
 
   function setUserIdFilter(next: string | undefined) {
     setSearchParams(
@@ -85,10 +126,6 @@ export function PayslipsPage() {
     const t = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), 300)
     return () => window.clearTimeout(t)
   }, [searchInput])
-
-  useEffect(() => {
-    setPage(1)
-  }, [filterUserId, year, month])
 
   useEffect(() => {
     if (!filterUserId) {
@@ -161,68 +198,131 @@ export function PayslipsPage() {
   const loadPayslips = useCallback(async () => {
     setListLoading(true)
     try {
-      const res = await payslipsApi.getPayslips({
-        page,
-        limit,
-        userId: filterUserId,
-        year,
-        month,
-      })
-      setDataSource(res.data)
-      setTotal(res.meta.total)
+      const acc: Payslip[] = []
+      let totalCount = 0
+      let hitCap = false
+      for (let pageNum = 1; pageNum <= MAX_FETCH_PAGES; pageNum += 1) {
+        const res = await payslipsApi.getPayslips({
+          page: pageNum,
+          limit: FETCH_PAGE_SIZE,
+          userId: filterUserId,
+          year,
+          month,
+        })
+        totalCount = res.meta.total
+        acc.push(...res.data)
+        if (acc.length >= totalCount || res.data.length === 0) {
+          break
+        }
+        if (pageNum === MAX_FETCH_PAGES && acc.length < totalCount) {
+          hitCap = true
+          break
+        }
+      }
+      setDataSource(acc)
+      setTotal(totalCount)
+      setTruncated(hitCap)
+      if (hitCap) {
+        message.warning(
+          `Affichage partiel : ${acc.length} bulletin(s) sur ${totalCount} (limite de chargement). Affinez les filtres pour voir le reste.`,
+        )
+      }
     } catch (e) {
       message.error(
         getApiErrorMessage(e, 'Impossible de charger les bulletins de paie'),
       )
       setDataSource([])
       setTotal(0)
+      setTruncated(false)
     } finally {
       setListLoading(false)
     }
-  }, [page, limit, filterUserId, year, month, message])
+  }, [filterUserId, year, month, message])
 
   useEffect(() => {
     void loadPayslips()
   }, [loadPayslips])
 
-  async function openPdf(row: Payslip) {
-    setOpeningId(row.id)
-    try {
-      const detail = await payslipsApi.getPayslipById(row.id)
-      if (detail.presignedUrl) {
-        window.open(detail.presignedUrl, '_blank', 'noopener,noreferrer')
-      }
-    } catch (e) {
-      message.error(
-        getApiErrorMessage(e, "Impossible d'ouvrir le bulletin"),
-      )
-    } finally {
-      setOpeningId(null)
+  const groupedByPayMonth = useMemo((): MonthGroup[] => {
+    const map = new Map<number, Payslip[]>()
+    for (const p of dataSource) {
+      const k = periodSortKey(p.periodYear, p.periodMonth)
+      const list = map.get(k) ?? []
+      list.push(p)
+      map.set(k, list)
     }
-  }
-
-  function confirmDelete(row: Payslip) {
-    modal.confirm({
-      title: 'Supprimer ce bulletin ?',
-      content:
-        'Le fichier sera retiré du stockage. Cette action est irréversible.',
-      okText: 'Supprimer',
-      okType: 'danger',
-      cancelText: 'Annuler',
-      onOk: async () => {
-        try {
-          await payslipsApi.deletePayslip(row.id)
-          message.success('Bulletin supprimé')
-          await loadPayslips()
-        } catch (e) {
-          message.error(
-            getApiErrorMessage(e, 'La suppression a échoué'),
-          )
-          throw e
+    for (const list of map.values()) {
+      list.sort(
+        (a, b) =>
+          dayjs(b.uploadedAt).valueOf() - dayjs(a.uploadedAt).valueOf(),
+      )
+    }
+    return [...map.entries()]
+      .sort((a, b) => b[0] - a[0])
+      .map(([sortKey, rows]) => {
+        const first = rows[0]!
+        return {
+          sortKey,
+          periodMonth: first.periodMonth,
+          periodYear: first.periodYear,
+          title: formatPayPeriodTitle(first.periodMonth, first.periodYear),
+          rows,
         }
-      },
-    })
-  }
+      })
+  }, [dataSource])
+
+  const collapseDefaultKeys = useMemo(() => {
+    const keys = groupedByPayMonth.map((g) => String(g.sortKey))
+    if (keys.length <= 24) {
+      return keys
+    }
+    return keys.slice(0, 12)
+  }, [groupedByPayMonth])
+
+  const openPdf = useCallback(
+    async (row: Payslip) => {
+      setOpeningId(row.id)
+      try {
+        const detail = await payslipsApi.getPayslipById(row.id)
+        if (detail.presignedUrl) {
+          window.open(detail.presignedUrl, '_blank', 'noopener,noreferrer')
+        }
+      } catch (e) {
+        message.error(
+          getApiErrorMessage(e, "Impossible d'ouvrir le bulletin"),
+        )
+      } finally {
+        setOpeningId(null)
+      }
+    },
+    [message],
+  )
+
+  const confirmDelete = useCallback(
+    (row: Payslip) => {
+      modal.confirm({
+        title: 'Supprimer ce bulletin ?',
+        content:
+          'Le fichier sera retiré du stockage. Cette action est irréversible.',
+        okText: 'Supprimer',
+        okType: 'danger',
+        cancelText: 'Annuler',
+        onOk: async () => {
+          try {
+            await payslipsApi.deletePayslip(row.id)
+            message.success('Bulletin supprimé')
+            await loadPayslips()
+          } catch (e) {
+            message.error(
+              getApiErrorMessage(e, 'La suppression a échoué'),
+            )
+            throw e
+          }
+        },
+      })
+    },
+    [modal, message, loadPayslips],
+  )
 
   function resetFilters() {
     setYear(undefined)
@@ -231,108 +331,141 @@ export function PayslipsPage() {
     setSearchInput('')
   }
 
-  const columns: ColumnsType<Payslip> = [
-    {
-      title: 'Collaborateur',
-      key: 'name',
-      render: (_, row) => (
-        <span>
-          {row.user.lastName} {row.user.firstName}
-        </span>
-      ),
-    },
-    {
-      title: 'Matricule',
-      key: 'matricule',
-      width: 120,
-      render: (_, row) => row.user.employeeId?.trim() || '—',
-    },
-    {
-      title: 'Département',
-      key: 'dept',
-      ellipsis: true,
-      render: (_, row) => row.user.department?.trim() || '—',
-    },
-    {
-      title: 'Période',
-      key: 'period',
-      width: 160,
-      render: (_, row) => {
-        const m = MONTHS_FR[row.periodMonth - 1] ?? String(row.periodMonth)
-        return `${m} ${row.periodYear}`
-      },
-    },
-    {
-      title: 'Taille',
-      key: 'size',
-      width: 90,
-      render: (_, row) => formatFileSize(row.fileSize),
-    },
-    {
-      title: 'Déposé le',
-      key: 'uploadedAt',
-      width: 130,
-      render: (_, row) => dayjs(row.uploadedAt).format('DD/MM/YYYY HH:mm'),
-    },
-    {
-      title: 'Lu',
-      key: 'read',
-      width: 80,
-      align: 'center',
-      render: (_, row) =>
-        row.isRead ? (
-          <Tag color="success">Oui</Tag>
-        ) : (
-          <Tag>Non</Tag>
+  const columns: ColumnsType<Payslip> = useMemo(
+    () => [
+      {
+        title: 'Collaborateur',
+        key: 'name',
+        render: (_, row) => (
+          <Space size={12} align="center">
+            <Avatar
+              size={40}
+              src={row.user.profilePhotoUrl || undefined}
+              alt=""
+            >
+              {payslipUserInitials(row.user)}
+            </Avatar>
+            <span>
+              {row.user.lastName} {row.user.firstName}
+            </span>
+          </Space>
         ),
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      width: 140,
-      fixed: 'right',
-      render: (_, row) => (
-        <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            loading={openingId === row.id}
-            onClick={() => void openPdf(row)}
-          >
-            Voir
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => confirmDelete(row)}
-          >
-            Supprimer
-          </Button>
-        </Space>
-      ),
-    },
-  ]
+      },
+      {
+        title: 'Matricule',
+        key: 'matricule',
+        width: 120,
+        render: (_, row) => row.user.employeeId?.trim() || '—',
+      },
+      {
+        title: 'Département',
+        key: 'dept',
+        ellipsis: true,
+        render: (_, row) => row.user.department?.trim() || '—',
+      },
+      {
+        title: 'Taille',
+        key: 'size',
+        width: 90,
+        render: (_, row) => formatFileSize(row.fileSize),
+      },
+      {
+        title: 'Envoyé le',
+        key: 'uploadedAt',
+        width: 150,
+        render: (_, row) =>
+          dayjs(row.uploadedAt).format('DD/MM/YYYY HH:mm'),
+      },
+      {
+        title: 'Lu',
+        key: 'read',
+        width: 80,
+        align: 'center',
+        render: (_, row) =>
+          row.isRead ? (
+            <Tag color="success">Oui</Tag>
+          ) : (
+            <Tag>Non</Tag>
+          ),
+      },
+      {
+        title: 'Actions',
+        key: 'actions',
+        width: 140,
+        fixed: 'right',
+        render: (_, row) => (
+          <Space size="small">
+            <Button
+              type="link"
+              size="small"
+              icon={<EyeOutlined />}
+              loading={openingId === row.id}
+              onClick={() => {
+                void openPdf(row)
+              }}
+            >
+              Voir
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => confirmDelete(row)}
+            >
+              Supprimer
+            </Button>
+          </Space>
+        ),
+      },
+    ],
+    [openingId, openPdf, confirmDelete],
+  )
+
+  const collapseItems = useMemo(
+    () =>
+      groupedByPayMonth.map((g) => ({
+        key: String(g.sortKey),
+        label: (
+          <Space size="middle" wrap>
+            <strong>{g.title}</strong>
+            <Tag color="processing">
+              {g.rows.length} bulletin{g.rows.length > 1 ? 's' : ''}
+            </Tag>
+          </Space>
+        ),
+        children: (
+          <Table<Payslip>
+            className="payslips-month-table"
+            rowKey="id"
+            columns={columns}
+            dataSource={g.rows}
+            loading={false}
+            pagination={false}
+            scroll={{ x: 880 }}
+            size="middle"
+          />
+        ),
+      })),
+    [groupedByPayMonth, columns],
+  )
 
   return (
     <div>
-      <div className="employees-page-header">
-        <Title level={3} style={{ margin: 0 }}>
-          Bulletins de paie
-        </Title>
-        <Space wrap className="employees-toolbar-actions">
-          <Button
-            type="primary"
-            icon={<UploadOutlined />}
-            style={{ backgroundColor: TEAL }}
-            onClick={() => navigate('/payslips/upload')}
-          >
-            Importer des bulletins
-          </Button>
-        </Space>
-      </div>
+      <PageHeader
+        actions={
+          <Space wrap>
+            <Button
+              type="primary"
+              icon={<UploadOutlined />}
+              style={{ backgroundColor: TEAL }}
+              onClick={() => navigate('/payslips/upload')}
+            >
+              Importer des bulletins
+            </Button>
+          </Space>
+        }
+      />
 
       <div className="employees-filters">
         <Select
@@ -365,35 +498,90 @@ export function PayslipsPage() {
           notFoundContent={optionsLoading ? undefined : null}
         />
         <Button onClick={resetFilters}>Réinitialiser</Button>
-        <Tag color="processing">{total} bulletin(s)</Tag>
+        <Space size={8} wrap>
+          <Tag color="processing">{total} bulletin(s)</Tag>
+          {groupedByPayMonth.length > 0 ? (
+            <Tag>{groupedByPayMonth.length} mois</Tag>
+          ) : null}
+          {truncated ? <Tag color="warning">Liste tronquée</Tag> : null}
+        </Space>
       </div>
 
-      <Table<Payslip>
-        rowKey="id"
-        columns={columns}
-        dataSource={dataSource}
-        loading={listLoading}
-        scroll={{ x: 960 }}
-        pagination={{
-          current: page,
-          pageSize: limit,
-          total,
-          showSizeChanger: true,
-          pageSizeOptions: [10, 20, 50, 100],
-          showTotal: (t) => `${t} bulletin(s)`,
-        }}
-        onChange={(pag, _f, _s, extra) => {
-          if (extra.action !== 'paginate') {
-            return
-          }
-          if (pag.current != null) {
-            setPage(pag.current)
-          }
-          if (pag.pageSize != null) {
-            setLimit(pag.pageSize)
-          }
-        }}
-      />
+      <div className="employees-view-toggle-wrap">
+        <Segmented<PayslipsViewMode>
+          value={viewMode}
+          onChange={setViewMode}
+          options={[
+            {
+              label: (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <TableOutlined />
+                  Liste
+                </span>
+              ),
+              value: 'list',
+            },
+            {
+              label: (
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  <PartitionOutlined />
+                  Kanban
+                </span>
+              ),
+              value: 'kanban',
+            },
+          ]}
+          className="employees-view-toggle"
+        />
+      </div>
+
+      <div className="payslips-by-month">
+        {viewMode === 'kanban' ? (
+          <PayslipsKanban
+            groups={groupedByPayMonth}
+            loading={listLoading}
+            openingId={openingId}
+            onOpenPdf={openPdf}
+            onDelete={confirmDelete}
+          />
+        ) : listLoading ? (
+          <Table<Payslip>
+            rowKey="id"
+            columns={columns}
+            dataSource={[]}
+            loading
+            pagination={false}
+          />
+        ) : groupedByPayMonth.length === 0 ? (
+          <Table<Payslip>
+            rowKey="id"
+            columns={columns}
+            dataSource={[]}
+            loading={false}
+            pagination={false}
+            locale={{ emptyText: 'Aucun bulletin pour ces critères.' }}
+          />
+        ) : (
+          <Collapse
+            key={`pc-${filterUserId ?? 'all'}-${year ?? 'y'}-${month ?? 'm'}`}
+            bordered={false}
+            defaultActiveKey={collapseDefaultKeys}
+            items={collapseItems}
+          />
+        )}
+      </div>
     </div>
   )
 }

@@ -46,3 +46,20 @@ export async function changePassword(body: {
   )
   return data
 }
+
+export type AuthSessionRow = {
+  id: string
+  deviceInfo: string | null
+  ipAddress: string | null
+  createdAt: string
+  expiresAt: string
+}
+
+export async function listAuthSessions(): Promise<AuthSessionRow[]> {
+  const { data } = await api.get<AuthSessionRow[]>('/auth/sessions')
+  return data
+}
+
+export async function revokeAuthSession(id: string): Promise<void> {
+  await api.delete(`/auth/sessions/${encodeURIComponent(id)}`)
+}

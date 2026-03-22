@@ -41,7 +41,11 @@ describe('AuthService', () => {
     };
     user: { update: jest.Mock; findUnique: jest.Mock };
   };
-  let users: { findByEmail: jest.Mock; emailTaken: jest.Mock };
+  let users: {
+    findByEmail: jest.Mock;
+    emailTaken: jest.Mock;
+    findActiveEmployeesByEmployeeIdInsensitive: jest.Mock;
+  };
   let organization: { assertOrgAssignment: jest.Mock };
   let jwt: { signAsync: jest.Mock };
 
@@ -59,7 +63,10 @@ describe('AuthService', () => {
     isActive: true,
     employeeId: null,
     department: null,
+    departmentId: null,
+    serviceId: null,
     position: null,
+    profilePhotoKey: null,
     entryDate: null,
     createdAt: new Date('2025-01-01T00:00:00.000Z'),
   });
@@ -87,6 +94,7 @@ describe('AuthService', () => {
     users = {
       findByEmail: jest.fn(),
       emailTaken: jest.fn(),
+      findActiveEmployeesByEmployeeIdInsensitive: jest.fn(),
     };
 
     organization = {
@@ -252,6 +260,61 @@ describe('AuthService', () => {
     });
   });
 
+  describe('loginEmployee', () => {
+    const employeeUser = (): User => ({
+      ...baseUser(),
+      role: 'EMPLOYEE',
+      employeeId: 'EMP-001',
+      email: 'collab@entreprise.com',
+    });
+
+    it('réussit avec matricule + mot de passe corrects', async () => {
+      const u = employeeUser();
+      users.findActiveEmployeesByEmployeeIdInsensitive.mockResolvedValue([u]);
+      jest.mocked(bcrypt.compare).mockResolvedValue(true as never);
+
+      const out = await service.loginEmployee('EMP-001', 'secret123');
+
+      expect(out.user.id).toBe('user-1');
+      expect(out.user.role).toBe('EMPLOYEE');
+      expect(out.accessToken).toBe('signed.jwt.access');
+      expect(prisma.auditLog.create).toHaveBeenCalled();
+      expect(prisma.session.create).toHaveBeenCalled();
+    });
+
+    it('rejette si mot de passe incorrect', async () => {
+      const u = employeeUser();
+      users.findActiveEmployeesByEmployeeIdInsensitive.mockResolvedValue([u]);
+      jest.mocked(bcrypt.compare).mockResolvedValue(false as never);
+      prisma.auditLog.findFirst.mockResolvedValue(null);
+      prisma.auditLog.count.mockResolvedValue(0);
+
+      await expect(
+        service.loginEmployee('EMP-001', 'wrong'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(prisma.auditLog.create).toHaveBeenCalled();
+    });
+
+    it('rejette si matricule inconnu', async () => {
+      users.findActiveEmployeesByEmployeeIdInsensitive.mockResolvedValue([]);
+
+      await expect(
+        service.loginEmployee('X', 'any'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('rejette si matricule ambigu', async () => {
+      users.findActiveEmployeesByEmployeeIdInsensitive.mockResolvedValue([
+        employeeUser(),
+        { ...employeeUser(), id: 'user-2', email: 'b@x.com' },
+      ]);
+
+      await expect(
+        service.loginEmployee('EMP-001', 'secret123'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+  });
+
   describe('refreshTokens', () => {
     it('émet une nouvelle paire si refresh valide', async () => {
       const refreshPlain = 'opaque-refresh-token';
@@ -358,7 +421,10 @@ describe('AuthService', () => {
         isActive: false,
         employeeId: 'EMP-001',
         department: 'RH',
+        departmentId: null,
+        serviceId: null,
         position: 'Assistant',
+        profilePhotoKey: null,
         entryDate: null,
         createdAt: new Date(),
       };
@@ -427,7 +493,10 @@ describe('AuthService', () => {
       isActive: false,
       employeeId: 'E1',
       department: null,
+      departmentId: null,
+      serviceId: null,
       position: null,
+      profilePhotoKey: null,
       entryDate: null,
       createdAt: new Date(),
     };
@@ -507,7 +576,10 @@ describe('AuthService', () => {
       isActive: false,
       employeeId: 'E1',
       department: null,
+      departmentId: null,
+      serviceId: null,
       position: null,
+      profilePhotoKey: null,
       entryDate: null,
       createdAt: new Date(),
     };
@@ -723,11 +795,7 @@ describe('AuthService', () => {
       });
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
-      const msg = await service.changePassword(
-        actor,
-        'good',
-        'newpass123',
-      );
+      const msg = await service.changePassword(actor, 'good', 'newpass123');
       expect(msg.message).toContain('mis à jour');
       expect(prisma.user.update).toHaveBeenCalled();
       expect(prisma.auditLog.create).toHaveBeenCalledWith(

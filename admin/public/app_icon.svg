@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 120 120">
+  <rect width="120" height="120" rx="27" fill="#0F5C5E"/>
+  <circle cx="60" cy="60" r="42" fill="none" stroke="white" stroke-width="0.8" opacity="0.15"/>
+  <text x="44" y="80" font-family="system-ui, -apple-system, sans-serif" font-size="62" font-weight="700" fill="white">P</text>
+  <rect x="70" y="36" width="6" height="36" rx="3" fill="#F28C28"/>
+  <circle cx="73" cy="28.5" r="4.5" fill="#F28C28"/>
+</svg>

@@ -1,0 +1,137 @@
+.audit-page {
+  width: 100%;
+}
+
+.audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.audit-filters__grow {
+  flex: 1;
+  min-width: 8px;
+}
+
+.audit-range-picker .ant-picker,
+.audit-range-picker.ant-picker {
+  border-radius: 6px !important;
+  background: #ffffff !important;
+  border: 0.5px solid #e0e0e0 !important;
+}
+
+.audit-filter-select .ant-select-selector {
+  border-radius: 6px !important;
+  background: #ffffff !important;
+  border: 0.5px solid #e0e0e0 !important;
+}
+
+.audit-table-card.ant-card {
+  border-radius: 10px !important;
+  border: 0.5px solid #e8e8e8 !important;
+  box-shadow: none !important;
+}
+
+.audit-table-card .ant-card-body {
+  padding: 0 !important;
+}
+
+.audit-table .ant-table-thead > tr > th {
+  background: #f8f9fa !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: #7f8c8d !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 12px 14px !important;
+}
+
+.audit-table .ant-table-tbody > tr > td {
+  padding: 12px 14px !important;
+  vertical-align: middle;
+  font-size: 14px;
+}
+
+.audit-col-date {
+  font-size: 12px;
+  color: #7f8c8d;
+  white-space: nowrap;
+}
+
+.audit-col-detail {
+  font-size: 13px;
+  color: #1c2833;
+  line-height: 1.35;
+}
+
+.audit-col-user {
+  font-size: 12px;
+  color: #7f8c8d;
+}
+
+.audit-col-ip {
+  font-size: 11px;
+  color: #bdc3c7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    monospace;
+}
+
+.audit-badge {
+  margin: 0 !important;
+  font-size: 11px !important;
+  line-height: 1.45 !important;
+  padding: 2px 8px !important;
+  border-radius: 6px !important;
+  border: none !important;
+  font-weight: 600 !important;
+}
+
+.audit-badge--teal {
+  background: #e8f5f5 !important;
+  color: #0f5c5e !important;
+}
+
+.audit-badge--green {
+  background: #eafaf1 !important;
+  color: #27ae60 !important;
+}
+
+.audit-badge--red {
+  background: #fdedec !important;
+  color: #e74c3c !important;
+}
+
+.audit-badge--orange {
+  background: #fef3e5 !important;
+  color: #f28c28 !important;
+}
+
+.audit-badge--muted {
+  background: #f4f6f6 !important;
+  color: #7f8c8d !important;
+}
+
+.audit-empty {
+  padding: 48px 24px;
+  text-align: center;
+  font-size: 14px;
+  color: #7f8c8d;
+}
+
+.audit-btn-teal.ant-btn-primary {
+  background: #0f5c5e !important;
+  border-color: #0f5c5e !important;
+}
+
+.audit-btn-outline.ant-btn-variant-outlined {
+  color: #0f5c5e !important;
+  border-color: #0f5c5e !important;
+}
+
+.audit-btn-outline.ant-btn-variant-outlined:not(:disabled):hover {
+  color: #1a7a7d !important;
+  border-color: #1a7a7d !important;
+  background: #e8f5f5 !important;
+}

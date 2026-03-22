@@ -1,6 +1,6 @@
 import { FileProtectOutlined, MoreOutlined } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
-import { Button, Dropdown, Table, Tag, Typography } from 'antd'
+import { Avatar, Button, Card, Dropdown, Space, Table, Tag } from 'antd'
 import type {
   ColumnsType,
   TablePaginationConfig,
@@ -9,18 +9,30 @@ import type {
 import type { EmployeeUser } from '../../types/employees'
 import './employees.css'
 
-const { Text } = Typography
-
 type EmployeeTableProps = {
   dataSource: EmployeeUser[]
   loading: boolean
   pagination: TablePaginationConfig
   onChange: TableProps<EmployeeUser>['onChange']
+  rowSelection?: TableProps<EmployeeUser>['rowSelection']
   onEdit: (row: EmployeeUser) => void
   onDeactivate: (row: EmployeeUser) => void
   onReactivate: (row: EmployeeUser) => void
   onViewPayslips: (userId: string) => void
   onRegenerateInvitation: (row: EmployeeUser) => void
+  onActivateAndInvite?: (row: EmployeeUser) => void
+  onResendInvitation?: (row: EmployeeUser) => void
+}
+
+function rowInitials(row: EmployeeUser): string {
+  const a = row.firstName?.trim()?.[0] ?? ''
+  const b = row.lastName?.trim()?.[0] ?? ''
+  const pair = `${a}${b}`.toUpperCase()
+  return pair.length > 0 ? pair : '?'
+}
+
+function departmentLabel(row: EmployeeUser): string {
+  return row.orgDepartment?.name ?? row.department ?? '—'
 }
 
 export function EmployeeTable({
@@ -28,95 +40,135 @@ export function EmployeeTable({
   loading,
   pagination,
   onChange,
+  rowSelection,
   onEdit,
   onDeactivate,
   onReactivate,
   onViewPayslips,
   onRegenerateInvitation,
+  onActivateAndInvite,
+  onResendInvitation,
 }: EmployeeTableProps) {
   const columns: ColumnsType<EmployeeUser> = [
     {
-      title: 'Matricule',
-      dataIndex: 'employeeId',
-      key: 'employeeId',
-      render: (value: string | null) =>
-        value ? <Text strong>{value}</Text> : <Text type="secondary">—</Text>,
+      title: ' ',
+      key: 'avatar',
+      width: 92,
+      className: 'employees-table-col-avatar',
+      render: (_: unknown, row) => (
+        <Avatar
+          size={56}
+          src={row.profilePhotoUrl || undefined}
+          alt=""
+          className={
+            row.isActive
+              ? 'employee-table-avatar employee-table-avatar--active'
+              : 'employee-table-avatar employee-table-avatar--inactive'
+          }
+        >
+          {rowInitials(row)}
+        </Avatar>
+      ),
     },
     {
-      title: 'Nom complet',
-      key: 'fullName',
-      sorter: false,
-      render: (_: unknown, row) =>
-        `${row.firstName} ${row.lastName}`.trim() || '—',
+      title: 'Nom',
+      key: 'name',
+      ellipsis: true,
+      render: (_: unknown, row) => (
+        <div className="employee-table-name-cell">
+          <div className="employee-table-name">
+            {row.lastName} {row.firstName}
+          </div>
+          <div className="employee-table-matricule">
+            {row.employeeId ?? '—'}
+          </div>
+        </div>
+      ),
     },
     {
       title: 'Email',
       dataIndex: 'email',
       key: 'email',
       ellipsis: true,
-    },
-    {
-      title: 'Direction',
-      key: 'direction',
-      width: 140,
-      ellipsis: true,
-      render: (_: unknown, row) =>
-        row.orgDepartment?.direction?.name ?? '—',
+      className: 'employees-table-col-email',
+      render: (email: string) => (
+        <span className="employee-table-email">{email}</span>
+      ),
     },
     {
       title: 'Département',
       key: 'department',
-      render: (_: unknown, row) =>
-        row.orgDepartment?.name ?? row.department ?? '—',
-    },
-    {
-      title: 'Service',
-      key: 'service',
-      render: (_: unknown, row) => row.orgService?.name ?? '—',
-    },
-    {
-      title: 'Poste',
-      dataIndex: 'position',
-      key: 'position',
-      render: (v: string | null) => v ?? '—',
+      ellipsis: true,
+      render: (_: unknown, row) => (
+        <span className="employee-table-dept">{departmentLabel(row)}</span>
+      ),
     },
     {
       title: 'Statut',
       dataIndex: 'isActive',
       key: 'isActive',
-      width: 110,
-      render: (active: boolean) =>
-        active ? (
-          <Tag color="success">Actif</Tag>
-        ) : (
-          <Tag color="error">Inactif</Tag>
-        ),
+      width: 138,
+      render: (_active: boolean, row) => (
+        <Space orientation="vertical" size={4}>
+          {row.isActive ? (
+            <Tag className="employee-status-tag employee-status-tag--active">
+              Actif
+            </Tag>
+          ) : (
+            <Tag className="employee-status-tag employee-status-tag--inactive">
+              Inactif
+            </Tag>
+          )}
+          {row.isActive && row.mustChangePassword ? (
+            <Tag color="warning" style={{ marginInlineEnd: 0 }}>
+              MDP provisoire
+            </Tag>
+          ) : null}
+        </Space>
+      ),
     },
     {
       title: 'Actions',
       key: 'actions',
-      width: 88,
+      width: 72,
       fixed: 'right',
+      className: 'employees-table-col-actions',
       render: (_: unknown, row) => {
-        const items: MenuProps['items'] = [
-          { key: 'edit', label: 'Modifier' },
+        const items: MenuProps['items'] = [{ key: 'edit', label: 'Modifier' }]
+        if (!row.isActive && row.role === 'EMPLOYEE' && onActivateAndInvite) {
+          items.push({
+            key: 'activate_invite',
+            label: 'Activer et inviter',
+          })
+        }
+        if (row.isActive && row.mustChangePassword && onResendInvitation) {
+          items.push({
+            key: 'resend_invite',
+            label: 'Renvoyer l’invitation',
+          })
+        }
+        items.push(
           row.isActive
             ? { key: 'deactivate', label: 'Désactiver', danger: true }
             : { key: 'reactivate', label: 'Réactiver' },
-          ...(!row.isActive && row.role === 'EMPLOYEE'
-            ? [
-                {
-                  key: 'invitation',
-                  label: 'Code d’activation (nouveau)',
-                } as const,
-              ]
-            : []),
-          { key: 'payslips', label: 'Voir les bulletins', icon: <FileProtectOutlined /> },
-        ]
+        )
+        if (!row.isActive && row.role === 'EMPLOYEE') {
+          items.push({
+            key: 'invitation',
+            label: 'Code d’activation (nouveau)',
+          })
+        }
+        items.push({
+          key: 'payslips',
+          label: 'Voir les bulletins',
+          icon: <FileProtectOutlined />,
+        })
 
         const onMenuClick: MenuProps['onClick'] = ({ key, domEvent }) => {
           domEvent.stopPropagation()
           if (key === 'edit') onEdit(row)
+          else if (key === 'activate_invite') onActivateAndInvite?.(row)
+          else if (key === 'resend_invite') onResendInvitation?.(row)
           else if (key === 'deactivate') onDeactivate(row)
           else if (key === 'reactivate') onReactivate(row)
           else if (key === 'invitation') onRegenerateInvitation(row)
@@ -129,25 +181,44 @@ export function EmployeeTable({
             trigger={['click']}
             placement="bottomRight"
           >
-            <Button type="text" icon={<MoreOutlined />} aria-label="Actions" />
+            <Button
+              type="text"
+              icon={<MoreOutlined />}
+              aria-label="Actions"
+              className="employee-actions-trigger"
+            />
           </Dropdown>
         )
       },
     },
   ]
 
+  const paginationConfig: TablePaginationConfig = {
+    ...pagination,
+    size: 'small',
+  }
+
   return (
-    <Table<EmployeeUser>
-      rowKey="id"
-      columns={columns}
-      dataSource={dataSource}
-      loading={loading}
-      pagination={pagination}
-      onChange={onChange}
-      rowClassName={(record) =>
-        record.isActive ? '' : 'employee-row-inactive'
-      }
-      scroll={{ x: 1220 }}
-    />
+    <Card
+      className="employees-table-card"
+      variant="outlined"
+      styles={{ body: { padding: 0 } }}
+    >
+      <Table<EmployeeUser>
+        className="employees-table"
+        rowKey="id"
+        columns={columns}
+        dataSource={dataSource}
+        loading={loading}
+        pagination={paginationConfig}
+        onChange={onChange}
+        rowSelection={rowSelection}
+        rowClassName={(record) =>
+          record.isActive ? '' : 'employee-row-inactive'
+        }
+        scroll={{ x: 820 }}
+        tableLayout="fixed"
+      />
+    </Card>
   )
 }

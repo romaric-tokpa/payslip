@@ -43,17 +43,21 @@
     "class-validator": "^0.14.4",
     "compression": "^1.8.1",
     "dotenv": "^17.3.1",
+    "exceljs": "^4.4.0",
     "firebase-admin": "^13.7.0",
     "helmet": "^8.1.0",
+    "nodemailer": "^8.0.3",
     "papaparse": "^5.5.3",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "pdf-parse": "^2.4.5",
+    "pdfkit": "^0.18.0",
     "pg": "^8.20.0",
+    "prisma": "^7.5.0",
     "redis": "^5.11.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "xlsx": "^0.18.5",
-    "prisma": "^7.5.0"
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -67,8 +71,11 @@
     "@types/jest": "^30.0.0",
     "@types/multer": "^2.1.0",
     "@types/node": "^22.10.7",
+    "@types/nodemailer": "^7.0.11",
     "@types/papaparse": "^5.5.2",
     "@types/passport-jwt": "^4.0.1",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/pdfkit": "^0.17.5",
     "@types/pg": "^8.18.0",
     "@types/supertest": "^6.0.2",
     "eslint": "^9.18.0",
@@ -97,7 +104,9 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
-    "collectCoverageFrom": ["**/*.ts"],
+    "collectCoverageFrom": [
+      "**/*.ts"
+    ],
     "coveragePathIgnorePatterns": [
       "node_modules",
       "\\.spec\\.ts$",

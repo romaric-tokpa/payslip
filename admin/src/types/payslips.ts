@@ -3,6 +3,8 @@ export type PayslipUserSummary = {
   lastName: string
   employeeId: string | null
   department: string | null
+  /** URL présignée (avatar), absente ou null si pas de photo */
+  profilePhotoUrl?: string | null
 }
 
 export type Payslip = {
@@ -48,11 +50,64 @@ export type BulkUploadDetail = {
   matricule: string
   status: 'OK' | 'ERROR'
   reason?: string
+  fileIndex?: number
+  retryable?: boolean
 }
 
 export type BulkUploadReport = {
   total: number
   success: number
   failed: number
+  /** Fichiers retirés par le RH à l’étape de vérification (fusionné côté client). */
+  ignored?: number
   details: BulkUploadDetail[]
+}
+
+export type BulkAnalyzeExtracted = {
+  matricule?: string
+  firstName?: string
+  lastName?: string
+  fullName?: string
+  periodMonth?: number
+  periodYear?: number
+  confidence: number
+}
+
+export type BulkAnalyzeMatch = {
+  userId?: string
+  employeeName?: string
+  employeeId?: string | null
+  periodMonth?: number
+  periodYear?: number
+  matchMethod: 'matricule' | 'name' | 'filename' | 'unmatched'
+  confidence: number
+}
+
+export type BulkAnalyzeRow = {
+  filename: string
+  fileIndex: number
+  extracted: BulkAnalyzeExtracted
+  match: BulkAnalyzeMatch
+  status: 'auto_matched' | 'needs_review' | 'unmatched'
+  duplicate: boolean
+  duplicateReason?: 'database' | 'batch'
+  duplicateMessage?: string
+  blockingError?: string
+}
+
+export type BulkAnalyzeResponse = {
+  batchId: string
+  analyses: BulkAnalyzeRow[]
+}
+
+export type ConfirmBulkAssignment = {
+  fileIndex: number
+  userId: string
+  periodMonth: number
+  periodYear: number
+}
+
+export type ConfirmBulkPayload = {
+  batchId: string
+  assignments: ConfirmBulkAssignment[]
 }

@@ -1,15 +1,11 @@
-import { Tabs, Typography } from 'antd'
+import { Tabs } from 'antd'
 import { BulkUploadTab } from './BulkUploadTab'
+import './payslip-upload.css'
 import { SingleUploadTab } from './SingleUploadTab'
-
-const { Title } = Typography
 
 export function PayslipUploadPage() {
   return (
-    <div>
-      <Title level={3} style={{ marginBottom: 24 }}>
-        Téléversement de bulletins
-      </Title>
+    <div className="payslip-upload-page">
       <Tabs
         items={[
           {

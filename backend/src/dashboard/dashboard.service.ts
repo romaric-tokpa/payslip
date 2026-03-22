@@ -21,8 +21,14 @@ export type TopUnreadRow = {
 export type DashboardStats = {
   totalEmployees: number;
   activeEmployees: number;
+  /** Nouveaux collaborateurs (compte créé) sur le mois civil courant (UTC). */
+  newEmployeesThisMonth: number;
   payslipsThisMonth: number;
   consultationRate: number;
+  /** Taux de lecture des bulletins du mois civil précédent (UTC). */
+  consultationRatePreviousMonth: number;
+  /** consultationRate − consultationRatePreviousMonth (points de %). */
+  consultationRateDelta: number;
   unreadPayslips: number;
   monthlyUploads: MonthlyUploadStat[];
   topUnread: TopUnreadRow[];
@@ -49,11 +55,16 @@ export class DashboardService {
     const monthStart = new Date(Date.UTC(cy, cm - 1, 1, 0, 0, 0, 0));
     const monthEnd = new Date(Date.UTC(cy, cm, 0, 23, 59, 59, 999));
 
+    const py = cm === 1 ? cy - 1 : cy;
+    const pm = cm === 1 ? 12 : cm - 1;
+
     const [
       totalEmployees,
       activeEmployees,
+      newEmployeesThisMonth,
       payslipsThisMonth,
       periodPayslipsAgg,
+      prevMonthPayslipsAgg,
       unreadPayslips,
     ] = await Promise.all([
       this.prisma.user.count({
@@ -61,6 +72,13 @@ export class DashboardService {
       }),
       this.prisma.user.count({
         where: { companyId, role: 'EMPLOYEE', isActive: true },
+      }),
+      this.prisma.user.count({
+        where: {
+          companyId,
+          role: 'EMPLOYEE',
+          createdAt: { gte: monthStart, lte: monthEnd },
+        },
       }),
       this.prisma.payslip.count({
         where: {
@@ -76,6 +94,14 @@ export class DashboardService {
         },
         select: { isRead: true },
       }),
+      this.prisma.payslip.findMany({
+        where: {
+          companyId,
+          periodYear: py,
+          periodMonth: pm,
+        },
+        select: { isRead: true },
+      }),
       this.prisma.payslip.count({
         where: { companyId, isRead: false },
       }),
@@ -86,6 +112,13 @@ export class DashboardService {
     const consultationRate =
       periodTotal > 0 ? Math.round((100 * periodRead) / periodTotal) : 0;
 
+    const prevTotal = prevMonthPayslipsAgg.length;
+    const prevRead = prevMonthPayslipsAgg.filter((p) => p.isRead).length;
+    const consultationRatePreviousMonth =
+      prevTotal > 0 ? Math.round((100 * prevRead) / prevTotal) : 0;
+    const consultationRateDelta =
+      consultationRate - consultationRatePreviousMonth;
+
     const monthlyUploads = await this.buildMonthlyUploads(companyId, now);
 
     const topUnread = await this.buildTopUnread(companyId);
@@ -93,8 +126,11 @@ export class DashboardService {
     return {
       totalEmployees,
       activeEmployees,
+      newEmployeesThisMonth,
       payslipsThisMonth,
       consultationRate,
+      consultationRatePreviousMonth,
+      consultationRateDelta,
       unreadPayslips,
       monthlyUploads,
       topUnread,

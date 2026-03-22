@@ -1,10 +1,13 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpException,
   HttpStatus,
+  Param,
+  ParseUUIDPipe,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -14,6 +17,7 @@ import {
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiResponse,
@@ -25,14 +29,17 @@ import { Throttle } from '../common/decorators/throttle.decorator';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
+import { SkipMustChangePassword } from './decorators/skip-must-change-password.decorator';
 import { Roles } from './decorators/roles.decorator';
 import { RolesGuard } from './guards/roles.guard';
 import {
   ActivateInvitationDto,
+  AuthSessionResponseDto,
   ChangePasswordDto,
   ForgotPasswordDto,
   InviteEmployeeDto,
   LoginDto,
+  LoginEmployeeDto,
   RefreshTokenDto,
   RegisterDto,
   ResetPasswordDto,
@@ -47,6 +54,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
+  @SkipMustChangePassword()
   @Throttle(10, 60)
   @ApiOperation({
     summary: 'Changer le mot de passe (utilisateur connecté)',
@@ -70,6 +78,40 @@ export class AuthController {
       dto.currentPassword,
       dto.newPassword,
     );
+  }
+
+  @Get('sessions')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @ApiOperation({
+    summary: 'Lister les sessions actives (refresh) du compte connecté',
+    description:
+      'Retourne les jetons de rafraîchissement encore valides pour cet utilisateur (navigateur / app).',
+  })
+  @ApiOkResponse({ type: AuthSessionResponseDto, isArray: true })
+  @ApiUnauthorizedResponse()
+  async listSessions(@CurrentUser() actor: RequestUser) {
+    return this.auth.listMyRefreshSessions(actor);
+  }
+
+  @Delete('sessions/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @ApiOperation({
+    summary: 'Révoquer une session refresh',
+    description:
+      'Supprime la ligne de session côté serveur. Les autres appareils devront se reconnecter.',
+  })
+  @ApiResponse({ status: 204, description: 'Session révoquée' })
+  @ApiNotFoundResponse({ description: 'Session absente ou non autorisée' })
+  @ApiUnauthorizedResponse()
+  async revokeSession(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() actor: RequestUser,
+  ): Promise<void> {
+    await this.auth.revokeRefreshSession(actor, id);
   }
 
   @Public()
@@ -195,6 +237,26 @@ export class AuthController {
   @ApiBadRequestResponse({ description: 'Corps de requête invalide' })
   async login(@Body() dto: LoginDto) {
     return this.auth.login(dto.email, dto.password);
+  }
+
+  @Public()
+  @Throttle(5, 60)
+  @Post('login-employee')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Connexion collaborateur (matricule + mot de passe, app mobile)',
+    description:
+      'Réservé aux comptes EMPLOYEE actifs possédant un matricule. Équivalent sécurisé à POST /auth/login avec identifiant = matricule.',
+  })
+  @ApiOkResponse({
+    description: 'Identique à POST /auth/login',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Identifiants invalides ou matricule ambigu',
+  })
+  @ApiBadRequestResponse({ description: 'Validation' })
+  async loginEmployee(@Body() dto: LoginEmployeeDto) {
+    return this.auth.loginEmployee(dto.employeeId, dto.password);
   }
 
   @Public()

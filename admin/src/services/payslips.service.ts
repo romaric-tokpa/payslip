@@ -1,7 +1,9 @@
 import { AxiosHeaders } from 'axios'
 import { api } from './api'
 import type {
+  BulkAnalyzeResponse,
   BulkUploadReport,
+  ConfirmBulkPayload,
   PaginatedPayslipsResponse,
   Payslip,
   PayslipDetail,
@@ -66,6 +68,41 @@ export async function uploadBulk(
   return data
 }
 
+export async function analyzeBulkPayslips(
+  files: File[],
+  onProgress?: (percent: number) => void,
+): Promise<BulkAnalyzeResponse> {
+  const formData = new FormData()
+  for (const f of files) {
+    formData.append('files', f)
+  }
+  const { data } = await api.post<BulkAnalyzeResponse>(
+    '/payslips/analyze-bulk',
+    formData,
+    {
+      headers: multipartHeaders(),
+      timeout: 300_000,
+      onUploadProgress: (evt) => {
+        if (evt.total != null && evt.total > 0 && onProgress) {
+          onProgress(Math.round((evt.loaded * 100) / evt.total))
+        }
+      },
+    },
+  )
+  return data
+}
+
+export async function confirmBulkPayslips(
+  body: ConfirmBulkPayload,
+): Promise<BulkUploadReport> {
+  const { data } = await api.post<BulkUploadReport>(
+    '/payslips/confirm-bulk',
+    body,
+    { timeout: 300_000 },
+  )
+  return data
+}
+
 export async function getPayslips(
   params: QueryPayslipsParams,
 ): Promise<PaginatedPayslipsResponse> {
@@ -73,6 +110,22 @@ export async function getPayslips(
     params: payslipQueryToParams(params),
   })
   return data
+}
+
+/** Indique si un bulletin existe déjà pour ce collaborateur et cette période. */
+export async function payslipExistsForUserPeriod(
+  userId: string,
+  periodMonth: number,
+  periodYear: number,
+): Promise<boolean> {
+  const res = await getPayslips({
+    userId,
+    month: periodMonth,
+    year: periodYear,
+    page: 1,
+    limit: 1,
+  })
+  return res.meta.total > 0
 }
 
 export async function getPayslipById(id: string): Promise<PayslipDetail> {

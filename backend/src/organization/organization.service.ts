@@ -14,6 +14,20 @@ import { CreateServiceDto } from './dto/create-service.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { UpdateDirectionDto } from './dto/update-direction.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
+import type {
+  OrgChartDepartmentNodeDto,
+  OrgChartDirectionNodeDto,
+  OrgChartEmployeeDto,
+  OrgChartResponseDto,
+  OrgChartServiceNodeDto,
+} from './dto/org-chart.dto';
+import type {
+  OrgTreeDepartmentDto,
+  OrgTreeDirectionDto,
+  OrgTreeResponseDto,
+  OrgTreeServiceDto,
+} from './dto/org-tree.dto';
+import { ORG_TREE_UNASSIGNED_DIRECTION_ID } from './org-tree.constants';
 
 const departmentListSelect = {
   id: true,
@@ -307,11 +321,7 @@ export class OrganizationService {
     });
   }
 
-  async updateService(
-    actor: RequestUser,
-    id: string,
-    dto: UpdateServiceDto,
-  ) {
+  async updateService(actor: RequestUser, id: string, dto: UpdateServiceDto) {
     const companyId = this.assertRhWithCompany(actor);
     const existing = await this.prisma.service.findFirst({
       where: { id, companyId },
@@ -331,7 +341,9 @@ export class OrganizationService {
           select: { id: true },
         });
         if (!d) {
-          throw new BadRequestException('Département inconnu ou hors entreprise');
+          throw new BadRequestException(
+            'Département inconnu ou hors entreprise',
+          );
         }
         departmentId = d.id;
       }
@@ -367,5 +379,275 @@ export class OrganizationService {
       throw new NotFoundException('Service introuvable');
     }
     await this.prisma.service.delete({ where: { id } });
+  }
+
+  /**
+   * Arbre direction → département → service avec effectifs (EMPLOYEE actifs, `groupBy`).
+   */
+  async getOrgTree(actor: RequestUser): Promise<OrgTreeResponseDto> {
+    const companyId = this.assertRhWithCompany(actor);
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { id: true, name: true },
+    });
+    if (!company) {
+      throw new NotFoundException('Entreprise introuvable');
+    }
+
+    const employeeWhere = {
+      companyId,
+      role: 'EMPLOYEE' as const,
+      isActive: true,
+    };
+
+    const [
+      totalEmployees,
+      deptGroups,
+      svcGroups,
+      directionRows,
+      departmentRows,
+      serviceRows,
+    ] = await Promise.all([
+      this.prisma.user.count({ where: employeeWhere }),
+      this.prisma.user.groupBy({
+        by: ['departmentId'],
+        where: { ...employeeWhere, departmentId: { not: null } },
+        _count: { _all: true },
+      }),
+      this.prisma.user.groupBy({
+        by: ['serviceId'],
+        where: { ...employeeWhere, serviceId: { not: null } },
+        _count: { _all: true },
+      }),
+      this.prisma.direction.findMany({
+        where: { companyId },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true },
+      }),
+      this.prisma.department.findMany({
+        where: { companyId },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, directionId: true },
+      }),
+      this.prisma.service.findMany({
+        where: { companyId },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, departmentId: true },
+      }),
+    ]);
+
+    const deptCountMap = new Map<string, number>();
+    for (const g of deptGroups) {
+      if (g.departmentId != null) {
+        deptCountMap.set(g.departmentId, g._count._all);
+      }
+    }
+    const svcCountMap = new Map<string, number>();
+    for (const g of svcGroups) {
+      if (g.serviceId != null) {
+        svcCountMap.set(g.serviceId, g._count._all);
+      }
+    }
+
+    const buildServices = (departmentId: string): OrgTreeServiceDto[] =>
+      serviceRows
+        .filter((s) => s.departmentId === departmentId)
+        .map((s) => ({
+          id: s.id,
+          name: s.name,
+          employeeCount: svcCountMap.get(s.id) ?? 0,
+          departmentId,
+        }));
+
+    const buildDepartments = (
+      directionId: string | null,
+    ): OrgTreeDepartmentDto[] =>
+      departmentRows
+        .filter((d) =>
+          directionId === null
+            ? d.directionId == null
+            : d.directionId === directionId,
+        )
+        .map((d) => ({
+          id: d.id,
+          name: d.name,
+          employeeCount: deptCountMap.get(d.id) ?? 0,
+          directionId: d.directionId,
+          services: buildServices(d.id),
+        }));
+
+    const directionsFromDb: OrgTreeDirectionDto[] = directionRows.map(
+      (dir) => {
+        const departments = buildDepartments(dir.id);
+        const employeeCount = departments.reduce(
+          (acc, dep) => acc + dep.employeeCount,
+          0,
+        );
+        return {
+          id: dir.id,
+          name: dir.name,
+          employeeCount,
+          departments,
+        };
+      },
+    );
+
+    const orphanDepartments = buildDepartments(null);
+    const directions: OrgTreeDirectionDto[] =
+      orphanDepartments.length > 0
+        ? [
+            ...directionsFromDb,
+            {
+              id: ORG_TREE_UNASSIGNED_DIRECTION_ID,
+              name: 'Sans direction',
+              employeeCount: orphanDepartments.reduce(
+                (acc, d) => acc + d.employeeCount,
+                0,
+              ),
+              departments: orphanDepartments,
+            },
+          ]
+        : directionsFromDb;
+
+    return {
+      company: {
+        id: company.id,
+        name: company.name,
+        totalEmployees,
+      },
+      directions,
+    };
+  }
+
+  /**
+   * Données hiérarchisées pour un organigramme (direction → département → service / collaborateurs).
+   */
+  async getOrgChart(actor: RequestUser): Promise<OrgChartResponseDto> {
+    const companyId = this.assertRhWithCompany(actor);
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { name: true },
+    });
+    const companyName = company?.name ?? 'Entreprise';
+
+    const [directionRows, departmentRows, serviceRows, employeeRows] =
+      await Promise.all([
+        this.prisma.direction.findMany({
+          where: { companyId },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true },
+        }),
+        this.prisma.department.findMany({
+          where: { companyId },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, directionId: true },
+        }),
+        this.prisma.service.findMany({
+          where: { companyId },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, departmentId: true },
+        }),
+        this.prisma.user.findMany({
+          where: { companyId, role: 'EMPLOYEE', isActive: true },
+          orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            position: true,
+            departmentId: true,
+            serviceId: true,
+            orgService: {
+              select: { id: true, name: true, departmentId: true },
+            },
+          },
+        }),
+      ]);
+
+    const svcById = new Map(serviceRows.map((s) => [s.id, s]));
+
+    const toEmpDto = (e: (typeof employeeRows)[0]): OrgChartEmployeeDto => ({
+      id: e.id,
+      firstName: e.firstName,
+      lastName: e.lastName,
+      position: e.position,
+      serviceName: e.orgService?.name ?? null,
+    });
+
+    const buildDepartmentNode = (deptId: string): OrgChartDepartmentNodeDto => {
+      const dept = departmentRows.find((d) => d.id === deptId);
+      if (!dept) {
+        throw new NotFoundException('Département introuvable');
+      }
+      const deptServices = serviceRows.filter((s) => s.departmentId === deptId);
+      const deptEmployees = employeeRows.filter(
+        (e) => e.departmentId === deptId,
+      );
+
+      const services: OrgChartServiceNodeDto[] = deptServices.map((svc) => ({
+        id: svc.id,
+        name: svc.name,
+        employees: deptEmployees
+          .filter((e) => {
+            if (!e.serviceId) {
+              return false;
+            }
+            const s = svcById.get(e.serviceId);
+            return s?.id === svc.id && s.departmentId === deptId;
+          })
+          .map(toEmpDto),
+      }));
+
+      const employees = deptEmployees
+        .filter((e) => {
+          if (!e.serviceId) {
+            return true;
+          }
+          const s = svcById.get(e.serviceId);
+          if (!s || s.departmentId !== deptId) {
+            return true;
+          }
+          return false;
+        })
+        .map(toEmpDto);
+
+      return {
+        id: dept.id,
+        name: dept.name,
+        services,
+        employees,
+      };
+    };
+
+    const directions: OrgChartDirectionNodeDto[] = directionRows.map((dir) => ({
+      id: dir.id,
+      name: dir.name,
+      departments: departmentRows
+        .filter((d) => d.directionId === dir.id)
+        .map((d) => buildDepartmentNode(d.id)),
+    }));
+
+    const departmentsWithoutDirection = departmentRows
+      .filter((d) => d.directionId == null)
+      .map((d) => buildDepartmentNode(d.id));
+
+    const orphanServices = serviceRows
+      .filter((s) => s.departmentId == null)
+      .map((svc) => ({
+        id: svc.id,
+        name: svc.name,
+        employees: employeeRows
+          .filter((e) => e.serviceId === svc.id && e.departmentId == null)
+          .map(toEmpDto),
+      }));
+
+    return {
+      companyName,
+      directions,
+      departmentsWithoutDirection,
+      orphanServices,
+    };
   }
 }

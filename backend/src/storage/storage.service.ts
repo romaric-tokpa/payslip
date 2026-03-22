@@ -107,6 +107,33 @@ export class StorageService implements OnModuleInit {
     }
   }
 
+  /**
+   * Upload avec jusqu’à 3 nouvelles tentatives après échec (délais 1s, 2s, 4s).
+   * Au total 4 essais (1 initial + 3 reprises).
+   */
+  async uploadFileWithRetry(
+    buffer: Buffer,
+    key: string,
+    contentType: string,
+  ): Promise<void> {
+    const backoffMs = [1000, 2000, 4000];
+    let last: unknown;
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        await this.uploadFile(buffer, key, contentType);
+        return;
+      } catch (e) {
+        last = e;
+        if (attempt < 3) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, backoffMs[attempt]!);
+          });
+        }
+      }
+    }
+    throw last;
+  }
+
   async uploadFile(
     buffer: Buffer,
     key: string,
@@ -153,5 +180,12 @@ export class StorageService implements OnModuleInit {
   ): string {
     const m = month.toString().padStart(2, '0');
     return `companies/${companyId}/payslips/${userId}/${year}/${m}.pdf`;
+  }
+
+  /** Photo de profil : une clé par utilisateur (extension selon le type uploadé). */
+  buildProfilePhotoKey(companySegment: string, userId: string, ext: string): string {
+    const e = ext.replace(/^\./u, '').toLowerCase();
+    const safe = e === 'jpeg' ? 'jpg' : e;
+    return `companies/${companySegment}/profiles/${userId}.${safe}`;
   }
 }
