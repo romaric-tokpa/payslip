@@ -4,14 +4,27 @@
   padding: 0 2px 32px;
 }
 
-/* Intro sous le h1 du layout : date du jour, sans dupliquer le titre */
+/* Intro : filtres période + date du jour */
 .dashboard-intro {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 12px;
   margin-bottom: 22px;
+}
+
+.dashboard-intro__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.dashboard-intro__period-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #5a6c7d;
 }
 
 .dashboard-intro__date {
@@ -299,6 +312,40 @@
 
 /* ——— Dashboard enrichi (KPI, graphiques, tableaux) ——— */
 
+/* Période dans la carte KPI « Bulletins distribués » (remplace le libellé mois/année) */
+.dashboard-kpi-period-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.dashboard-kpi-period-picker.ant-picker {
+  padding: 0 2px 0 0;
+  color: #bdc3c7;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.dashboard-kpi-period-picker.ant-picker .ant-picker-input > input {
+  color: #7f8c8d;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.dashboard-kpi-period-picker.ant-picker:hover,
+.dashboard-kpi-period-picker.ant-picker-focused {
+  background: rgba(15, 92, 94, 0.06);
+  border-radius: 8px;
+}
+
+.dashboard-kpi-period-paie {
+  color: #bdc3c7;
+  white-space: nowrap;
+}
+
 .dashboard-kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -422,6 +469,42 @@
   border-radius: 16px;
   border: 0.5px solid #e8e8e8;
   box-shadow: none;
+}
+
+/* Avatars collaborateurs : alignés sur EmployeeTable (56px, teal) */
+.dashboard-page .employee-table-avatar.ant-avatar {
+  flex-shrink: 0;
+}
+
+.dashboard-page .employee-table-avatar.ant-avatar .ant-avatar-string {
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  line-height: 56px !important;
+}
+
+.dashboard-page .employee-table-avatar--active.ant-avatar {
+  background: linear-gradient(145deg, #e8f5f5 0%, #d4ecec 100%) !important;
+  color: #0f5c5e !important;
+}
+
+/* Typo nom / matricule : alignée sur EmployeeTable */
+.dashboard-page .employee-table-name-cell {
+  min-width: 0;
+}
+
+.dashboard-page .employee-table-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1c2833;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+}
+
+.dashboard-page .employee-table-matricule {
+  margin-top: 4px;
+  font-size: 13px;
+  color: #95a5a6;
+  line-height: 1.4;
 }
 
 @media (max-width: 1024px) {

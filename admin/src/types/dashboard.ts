@@ -51,6 +51,7 @@ export type UnreadEmployeeMonthRow = {
   employeeId: string | null
   department: string | null
   distributedAt: string
+  profilePhotoUrl: string | null
 }
 
 export type RecentPayslipDashboardRow = {
@@ -64,6 +65,7 @@ export type RecentPayslipDashboardRow = {
     firstName: string
     lastName: string
     employeeId: string | null
+    profilePhotoUrl: string | null
   }
 }
 
@@ -121,4 +123,5 @@ export type DashboardStats = {
   }
   unreadEmployeesThisMonth: UnreadEmployeeMonthRow[]
   recentPayslips: RecentPayslipDashboardRow[]
+  viewGranularity: 'MONTH' | 'YEAR'
 }

@@ -30,7 +30,10 @@ export class DashboardKpiDto {
 }
 
 export class DashboardCurrentMonthDto {
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      'Mois de paie 1–12 ; 0 si agrégat annuel (viewGranularity YEAR)',
+  })
   month: number;
 
   @ApiProperty()
@@ -128,6 +131,9 @@ export class UnreadEmployeeMonthRowDto {
 
   @ApiProperty()
   distributedAt: string;
+
+  @ApiProperty({ nullable: true, description: 'URL présignée (S3), TTL court' })
+  profilePhotoUrl: string | null;
 }
 
 export class RecentPayslipUserDto {
@@ -139,6 +145,9 @@ export class RecentPayslipUserDto {
 
   @ApiProperty({ nullable: true })
   employeeId: string | null;
+
+  @ApiProperty({ nullable: true, description: 'URL présignée (S3), TTL court' })
+  profilePhotoUrl: string | null;
 }
 
 export class RecentPayslipRowDto {

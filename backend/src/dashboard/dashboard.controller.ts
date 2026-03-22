@@ -1,4 +1,13 @@
-import { Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiForbiddenResponse,
@@ -26,13 +35,37 @@ export class DashboardController {
   @Roles('RH_ADMIN')
   @ApiOperation({
     summary: 'Indicateurs RH pour le tableau de bord',
-    description: 'Périmètre : entreprise du RH connecté.',
+    description:
+      'Périmètre : entreprise du RH connecté. Sans paramètre : mois civil UTC courant. ?year=2025 : agrégat sur toute l’année civile UTC. ?year=2025&month=3 : mois de paie mars 2025.',
   })
   @ApiOkResponse({ type: DashboardStatsResponseDto })
   @ApiForbiddenResponse()
   @ApiUnauthorizedResponse()
-  async getStats(@CurrentUser() actor: RequestUser) {
-    return this.dashboard.getStats(actor);
+  async getStats(
+    @CurrentUser() actor: RequestUser,
+    @Query('month') monthRaw?: string,
+    @Query('year') yearRaw?: string,
+  ) {
+    if (monthRaw === undefined && yearRaw === undefined) {
+      return this.dashboard.getStats(actor);
+    }
+    if (yearRaw === undefined) {
+      throw new BadRequestException(
+        'year est requis (2000–2100) lorsque month est fourni.',
+      );
+    }
+    const year = Number(yearRaw);
+    if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+      throw new BadRequestException('year doit être un entier entre 2000 et 2100.');
+    }
+    if (monthRaw === undefined || monthRaw === '') {
+      return this.dashboard.getStats(actor, { year });
+    }
+    const month = Number(monthRaw);
+    if (!Number.isInteger(month) || month < 1 || month > 12) {
+      throw new BadRequestException('month doit être un entier entre 1 et 12.');
+    }
+    return this.dashboard.getStats(actor, { year, month });
   }
 
   @Post('remind-unread')

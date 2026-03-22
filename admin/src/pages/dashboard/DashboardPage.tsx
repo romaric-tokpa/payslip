@@ -6,18 +6,23 @@ import {
 import {
   Alert,
   App,
+  Avatar,
   Button,
   Card,
+  DatePicker,
   Progress,
+  Segmented,
   Space,
   Spin,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
+import utc from 'dayjs/plugin/utc'
 import 'dayjs/locale/fr'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -41,13 +46,14 @@ import {
   CartesianGrid,
   Cell,
   ResponsiveContainer,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   XAxis,
   YAxis,
 } from 'recharts'
 import './dashboard.css'
 
 dayjs.extend(relativeTime)
+dayjs.extend(utc)
 dayjs.locale('fr')
 
 const MONTH_LABELS_SHORT = [
@@ -87,6 +93,14 @@ function initialsFromName(name: string): string {
   return pair.length > 0 ? pair : '?'
 }
 
+/** Mois (1–12) et année UTC — source de vérité pour l’API (évite dayjs invalides du DatePicker). */
+function utcPeriodNowParts(): { month: number; year: number } {
+  const d = dayjs.utc()
+  return { month: d.month() + 1, year: d.year() }
+}
+
+type DashboardPeriodMode = 'month' | 'year'
+
 export function DashboardPage() {
   const { message } = App.useApp()
   const { isLoading: authLoading, isAuthenticated, accessToken } = useAuth()
@@ -95,12 +109,50 @@ export function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [remindLoading, setRemindLoading] = useState(false)
+  const [periodMode, setPeriodMode] = useState<DashboardPeriodMode>('month')
+  const [periodParts, setPeriodParts] = useState(utcPeriodNowParts)
+  const [yearOnly, setYearOnly] = useState(() => utcPeriodNowParts().year)
+
+  const periodPickerValue = useMemo(
+    () =>
+      dayjs()
+        .year(periodParts.year)
+        .month(periodParts.month - 1)
+        .date(1)
+        .startOf('month'),
+    [periodParts.month, periodParts.year],
+  )
+
+  const yearPickerValue = useMemo(
+    () => dayjs().year(yearOnly).startOf('year'),
+    [yearOnly],
+  )
+
+  const canRemindUnread = useMemo(() => {
+    if (periodMode !== 'month') {
+      return false
+    }
+    const cur = utcPeriodNowParts()
+    return (
+      periodParts.year === cur.year && periodParts.month === cur.month
+    )
+  }, [periodMode, periodParts.month, periodParts.year])
 
   const load = useCallback(async () => {
     setLoading(true)
     setLoadError(null)
     try {
-      const data = await dashboardApi.getDashboardStats()
+      const data =
+        periodMode === 'year'
+          ? await dashboardApi.getDashboardStats({
+              scope: 'year',
+              year: yearOnly,
+            })
+          : await dashboardApi.getDashboardStats({
+              scope: 'month',
+              month: periodParts.month,
+              year: periodParts.year,
+            })
       setStats(data)
     } catch (e) {
       const msg = getApiErrorMessage(
@@ -112,7 +164,7 @@ export function DashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [periodMode, yearOnly, periodParts.month, periodParts.year])
 
   useEffect(() => {
     if (authLoading || !isAuthenticated || !accessToken) {
@@ -138,14 +190,27 @@ export function DashboardPage() {
     if (!stats?.charts.consultationByMonth?.length) {
       return []
     }
-    return stats.charts.consultationByMonth.map((item) => ({
-      monthKey: item.month,
-      month: item.month.length >= 7 ? item.month.slice(5) : item.month,
-      rate: item.rate,
-      total: item.total,
-      read: item.read,
-    }))
-  }, [stats?.charts.consultationByMonth])
+    return stats.charts.consultationByMonth.map((item) => {
+      let short =
+        item.month.length >= 7 ? item.month.slice(5) : item.month
+      if (
+        stats?.viewGranularity === 'YEAR' &&
+        item.month.length >= 7
+      ) {
+        const mi = Number.parseInt(item.month.slice(5, 7), 10)
+        if (mi >= 1 && mi <= 12) {
+          short = MONTH_LABELS_SHORT[mi - 1]
+        }
+      }
+      return {
+        monthKey: item.month,
+        month: short,
+        rate: item.rate,
+        total: item.total,
+        read: item.read,
+      }
+    })
+  }, [stats?.charts.consultationByMonth, stats?.viewGranularity])
 
   const departmentChartData = useMemo(() => {
     if (!stats?.charts.consultationByDepartment?.length) {
@@ -160,15 +225,47 @@ export function DashboardPage() {
     if (!stats) {
       return ''
     }
+    if (stats.viewGranularity === 'YEAR') {
+      return `Année ${stats.currentMonth.year}`
+    }
     const m = stats.currentMonth.month
     const label = MONTH_LABELS_SHORT[m - 1] ?? String(m)
     return `${label} ${stats.currentMonth.year}`
   }, [stats])
 
-  const signaturePeriodLabel =
-    stats != null
-      ? `${MONTH_LABELS_SHORT[stats.signaturePeriodMonth - 1] ?? ''} ${stats.signaturePeriodYear}`
-      : ''
+  const signaturePeriodLabel = useMemo(() => {
+    if (!stats) {
+      return ''
+    }
+    if (stats.viewGranularity === 'YEAR') {
+      return `Année ${stats.signaturePeriodYear}`
+    }
+    return `${MONTH_LABELS_SHORT[stats.signaturePeriodMonth - 1] ?? ''} ${stats.signaturePeriodYear}`
+  }, [stats])
+
+  const trendVsPreviousPeriod = useMemo(() => {
+    if (stats?.viewGranularity === 'YEAR') {
+      return 'vs année précédente'
+    }
+    return 'vs mois précédent'
+  }, [stats?.viewGranularity])
+
+  const trendEmployeesLabel = useMemo(() => {
+    if (stats?.viewGranularity === 'YEAR') {
+      return 'année vs année précédente'
+    }
+    return 'période vs mois précédent'
+  }, [stats?.viewGranularity])
+
+  const consultationChartSubtitle = useMemo(() => {
+    if (!stats) {
+      return ''
+    }
+    if (stats.viewGranularity === 'YEAR') {
+      return `Par mois de paie — ${currentMonthLabel}`
+    }
+    return `12 mois de paie se terminant à ${currentMonthLabel}`
+  }, [stats, currentMonthLabel])
 
   const unreadColumns: ColumnsType<UnreadEmployeeMonthRow> = useMemo(
     () => [
@@ -176,26 +273,18 @@ export function DashboardPage() {
         title: 'Collaborateur',
         key: 'name',
         render: (_, record) => (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 8,
-                background: '#FEF3E5',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 10,
-                fontWeight: 600,
-                color: '#F28C28',
-              }}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Avatar
+              size={56}
+              src={record.profilePhotoUrl ?? undefined}
+              alt=""
+              className="employee-table-avatar employee-table-avatar--active"
             >
               {initialsFromName(record.name)}
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 500 }}>{record.name}</div>
-              <div style={{ fontSize: 11, color: '#BDC3C7' }}>
+            </Avatar>
+            <div className="employee-table-name-cell">
+              <div className="employee-table-name">{record.name}</div>
+              <div className="employee-table-matricule">
                 {record.employeeId?.trim() || '—'}
               </div>
             </div>
@@ -226,11 +315,11 @@ export function DashboardPage() {
         title: 'Collaborateur',
         key: 'name',
         render: (_, r) => (
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 500 }}>
+          <div className="employee-table-name-cell">
+            <div className="employee-table-name">
               {r.firstName} {r.lastName}
             </div>
-            <div style={{ fontSize: 11, color: '#BDC3C7' }}>
+            <div className="employee-table-matricule">
               {r.employeeId?.trim() || '—'}
             </div>
           </div>
@@ -272,8 +361,27 @@ export function DashboardPage() {
       {
         title: 'Collaborateur',
         key: 'user',
-        render: (_, r) =>
-          `${r.user.firstName} ${r.user.lastName} (${r.user.employeeId?.trim() || '—'})`,
+        render: (_, r) => {
+          const fullName = `${r.user.firstName} ${r.user.lastName}`.trim()
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <Avatar
+                size={56}
+                src={r.user.profilePhotoUrl ?? undefined}
+                alt=""
+                className="employee-table-avatar employee-table-avatar--active"
+              >
+                {initialsFromName(fullName)}
+              </Avatar>
+              <div className="employee-table-name-cell">
+                <div className="employee-table-name">{fullName}</div>
+                <div className="employee-table-matricule">
+                  {r.user.employeeId?.trim() || '—'}
+                </div>
+              </div>
+            </div>
+          )
+        },
       },
       {
         title: 'Période',
@@ -316,7 +424,69 @@ export function DashboardPage() {
 
   return (
     <div className="dashboard-page">
-      <header className="dashboard-intro" aria-label="Date du jour">
+      <header className="dashboard-intro" aria-label="Tableau de bord">
+        <div className="dashboard-intro__filters">
+          <span className="dashboard-intro__period-label" id="dashboard-period-label">
+            Période (UTC)
+          </span>
+          <Segmented<DashboardPeriodMode>
+            value={periodMode}
+            onChange={(mode) => {
+              setPeriodMode(mode)
+              if (mode === 'year') {
+                setYearOnly(periodParts.year)
+              } else {
+                setPeriodParts((p) => ({ ...p, year: yearOnly }))
+              }
+            }}
+            options={[
+              { label: 'Mois', value: 'month' },
+              { label: 'Année', value: 'year' },
+            ]}
+            aria-labelledby="dashboard-period-label"
+          />
+          {periodMode === 'month' ? (
+            <DatePicker
+              picker="month"
+              allowClear={false}
+              format="MMMM YYYY"
+              value={periodPickerValue}
+              onChange={(d) => {
+                if (d != null && d.isValid()) {
+                  setPeriodParts({
+                    month: d.month() + 1,
+                    year: d.year(),
+                  })
+                }
+              }}
+              disabledDate={(current) => {
+                if (current == null) {
+                  return false
+                }
+                const cUtc = dayjs.utc([current.year(), current.month(), 1])
+                return cUtc.isAfter(dayjs.utc(), 'month')
+              }}
+              aria-label="Mois et année de paie"
+            />
+          ) : (
+            <DatePicker
+              picker="year"
+              allowClear={false}
+              format="YYYY"
+              value={yearPickerValue}
+              onChange={(d) => {
+                if (d != null && d.isValid()) {
+                  setYearOnly(d.year())
+                }
+              }}
+              disabledDate={(current) =>
+                current != null &&
+                current.year() > dayjs.utc().year()
+              }
+              aria-label="Année civile UTC"
+            />
+          )}
+        </div>
         <span className="dashboard-intro__date">{todayLabel}</span>
       </header>
 
@@ -370,14 +540,14 @@ export function DashboardPage() {
                   value={stats.kpi.activeEmployeesStrict}
                   suffix={`/ ${stats.kpi.totalEmployees} total`}
                   trend={stats.trends.employeesDelta}
-                  trendLabel="ce mois vs mois dernier"
+                  trendLabel={trendEmployeesLabel}
                 />
                 <KpiCard
                   label="Bulletins distribués"
                   value={stats.currentMonth.payslipsDistributed}
-                  suffix={`ce mois (${currentMonthLabel})`}
+                  suffix={`${currentMonthLabel} (paie)`}
                   trend={stats.trends.payslipsDelta}
-                  trendLabel="vs mois dernier"
+                  trendLabel={trendVsPreviousPeriod}
                 />
                 <KpiCard
                   label="Taux de consultation"
@@ -387,7 +557,7 @@ export function DashboardPage() {
                   )}
                   trend={stats.trends.consultationRateDelta}
                   trendSuffix="%"
-                  trendLabel="vs mois dernier"
+                  trendLabel={trendVsPreviousPeriod}
                 />
                 <KpiCard
                   label="Alertes contrats"
@@ -497,7 +667,7 @@ export function DashboardPage() {
                         Taux de consultation
                       </div>
                       <div className="dashboard-chart-panel__subtitle">
-                        12 derniers mois (périodes de paie)
+                        {consultationChartSubtitle}
                       </div>
                     </div>
                     <div className="dashboard-chart-panel__kpi">
@@ -543,7 +713,7 @@ export function DashboardPage() {
                           tick={{ fontSize: 12, fill: '#BDC3C7' }}
                           tickFormatter={(v) => `${v}%`}
                         />
-                        <Tooltip
+                        <RechartsTooltip
                           formatter={(value, name) => {
                             const n =
                               typeof value === 'number'
@@ -587,7 +757,7 @@ export function DashboardPage() {
                     Par département
                   </div>
                   <div className="dashboard-chart-panel__subtitle dashboard-chart-panel__subtitle--mb">
-                    Mois en cours — tri par taux croissant
+                    Période {currentMonthLabel} — tri par taux croissant
                   </div>
                   <div className="dashboard-recharts-box dashboard-recharts-box--220">
                     <ResponsiveContainer width="100%" height={220} minWidth={0}>
@@ -613,7 +783,7 @@ export function DashboardPage() {
                           width={118}
                           tick={{ fontSize: 11, fill: '#7F8C8D' }}
                         />
-                        <Tooltip
+                        <RechartsTooltip
                           formatter={(value) => {
                             const n =
                               typeof value === 'number'
@@ -658,14 +828,29 @@ export function DashboardPage() {
                       </div>
                     </div>
                     {stats.unreadEmployeesThisMonth.length > 0 ? (
-                      <Button
-                        size="small"
-                        loading={remindLoading}
-                        onClick={() => void handleRemindAll()}
-                        className="dashboard-remind-btn"
+                      <Tooltip
+                        title={
+                          periodMode === 'year'
+                            ? 'Passez en vue « Mois » sur le mois UTC en cours pour relancer.'
+                            : canRemindUnread
+                              ? undefined
+                              : 'La relance par notification concerne uniquement le mois civil UTC en cours.'
+                        }
                       >
-                        Relancer tous
-                      </Button>
+                        <span>
+                          <Button
+                            size="small"
+                            loading={remindLoading}
+                            disabled={
+                              periodMode === 'year' || !canRemindUnread
+                            }
+                            onClick={() => void handleRemindAll()}
+                            className="dashboard-remind-btn"
+                          >
+                            Relancer tous
+                          </Button>
+                        </span>
+                      </Tooltip>
                     ) : null}
                   </div>
                   <Table<UnreadEmployeeMonthRow>
@@ -675,7 +860,10 @@ export function DashboardPage() {
                     dataSource={stats.unreadEmployeesThisMonth}
                     columns={unreadColumns}
                     locale={{
-                      emptyText: 'Aucun bulletin non consulté ce mois',
+                      emptyText:
+                        stats.viewGranularity === 'YEAR'
+                          ? 'Aucun bulletin non consulté sur cette année'
+                          : 'Aucun bulletin non consulté ce mois',
                     }}
                   />
                 </div>
@@ -707,8 +895,13 @@ export function DashboardPage() {
               </div>
 
               <div className="dashboard-recent-panel">
-                <div className="dashboard-chart-panel__title dashboard-chart-panel__title--mb">
+                <div className="dashboard-chart-panel__title">
                   Derniers bulletins déposés
+                </div>
+                <div className="dashboard-chart-panel__subtitle dashboard-chart-panel__subtitle--mb">
+                  {stats.viewGranularity === 'YEAR'
+                    ? `Déposés sur l’année ${stats.currentMonth.year} (UTC) — jusqu’à 10 plus récents`
+                    : `Déposés en ${currentMonthLabel} (UTC) — 5 plus récents`}
                 </div>
                 <Table
                   rowKey="id"

@@ -1,9 +1,14 @@
-import type { CSSProperties, KeyboardEvent, MouseEvent } from 'react'
+import type {
+  CSSProperties,
+  KeyboardEvent,
+  MouseEvent,
+  ReactNode,
+} from 'react'
 
 export type KpiCardProps = {
   label: string
   value: string | number
-  suffix?: string
+  suffix?: ReactNode
   valueColor?: string
   trend?: number
   trendLabel?: string
@@ -81,7 +86,7 @@ export function KpiCard({
         >
           {value}
         </span>
-        {suffix ? (
+        {suffix != null && suffix !== '' ? (
           <span style={{ fontSize: 14, color: '#BDC3C7' }}>{suffix}</span>
         ) : null}
       </div>

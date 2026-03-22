@@ -1,11 +1,21 @@
 import { Select, Spin } from 'antd'
 import type { SelectProps } from 'antd/es/select'
+import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as employeesApi from '../../../services/employees.service'
 import type { EmployeeUser } from '../../../types/employees'
+import {
+  EmployeeSelectOptionLabel,
+  EmployeeSelectPresetLabel,
+} from '../EmployeeSelectOptionLabel'
 import { formatEmployeeOption } from '../payslipUploadConstants'
 
-type Option = { value: string; label: string }
+type Option = {
+  value: string
+  label: ReactNode
+  /** Texte brut pour tooltip / accessibilité */
+  title: string
+}
 
 type EmployeeSelectProps = {
   value: string | null
@@ -21,7 +31,20 @@ type EmployeeSelectProps = {
 }
 
 function userToOption(u: EmployeeUser): Option {
-  return { value: u.id, label: formatEmployeeOption(u) }
+  const title = formatEmployeeOption(u)
+  return {
+    value: u.id,
+    label: <EmployeeSelectOptionLabel user={u} />,
+    title,
+  }
+}
+
+function presetToOption(preset: { userId: string; label: string }): Option {
+  return {
+    value: preset.userId,
+    label: <EmployeeSelectPresetLabel text={preset.label} />,
+    title: preset.label,
+  }
 }
 
 export function EmployeeSelect({
@@ -37,7 +60,7 @@ export function EmployeeSelect({
   const [fetching, setFetching] = useState(false)
   const [options, setOptions] = useState<Option[]>(() => {
     if (preset) {
-      return [{ value: preset.userId, label: preset.label }]
+      return [presetToOption(preset)]
     }
     return []
   })
@@ -52,7 +75,7 @@ export function EmployeeSelect({
       if (has) {
         return prev
       }
-      return [{ value: preset.userId, label: preset.label }, ...prev]
+      return [presetToOption(preset), ...prev]
     })
   }, [preset])
 
@@ -97,16 +120,16 @@ export function EmployeeSelect({
     [debouncedSearch],
   )
 
-  const selectedLabel = useMemo(() => {
+  const selectedTitle = useMemo(() => {
     if (!value) {
       return undefined
     }
-    return options.find((o) => o.value === value)?.label
+    return options.find((o) => o.value === value)?.title
   }, [options, value])
 
   return (
     <Select
-      className={className}
+      className={`payslip-upload-select ${className ?? ''}`.trim()}
       showSearch
       allowClear={allowClear}
       placeholder={placeholder}
@@ -128,7 +151,7 @@ export function EmployeeSelect({
       style={{ minWidth: 220, width: '100%' }}
       popupMatchSelectWidth={false}
       aria-label={placeholder}
-      title={selectedLabel}
+      title={selectedTitle}
     />
   )
 }

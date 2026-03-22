@@ -135,4 +135,7 @@ export class DashboardStatsResponseDto {
 
   @ApiProperty({ type: [RecentPayslipRowDto] })
   recentPayslips: RecentPayslipRowDto[];
+
+  @ApiProperty({ enum: ['MONTH', 'YEAR'] })
+  viewGranularity: 'MONTH' | 'YEAR';
 }

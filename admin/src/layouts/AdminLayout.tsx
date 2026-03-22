@@ -255,13 +255,19 @@ export function AdminLayout() {
     user?.email,
   )
 
+  const sideWidth = collapsed ? SIDER_COLLAPSED_PX : SIDER_EXPANDED_PX
+
   return (
-    <Layout className="admin-root-layout" style={{ minHeight: '100vh' }}>
+    <Layout
+      className="admin-root-layout"
+      style={{
+        minHeight: '100vh',
+        ['--admin-sider-edge-px' as string]: `${sideWidth}px`,
+      }}
+    >
       <Sider
         className="admin-sider"
-        collapsible
         collapsed={collapsed}
-        onCollapse={setCollapsed}
         width={SIDER_EXPANDED_PX}
         collapsedWidth={SIDER_COLLAPSED_PX}
         theme="dark"
@@ -311,7 +317,7 @@ export function AdminLayout() {
       </Sider>
       <Layout
         className="admin-layout-main"
-        style={{ marginLeft: collapsed ? SIDER_COLLAPSED_PX : SIDER_EXPANDED_PX }}
+        style={{ marginLeft: sideWidth }}
       >
         <Header className="admin-layout-header">
           <div className="admin-layout-header-left">

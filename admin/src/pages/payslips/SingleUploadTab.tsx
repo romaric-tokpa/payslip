@@ -1,11 +1,12 @@
 import { FilePdfOutlined } from '@ant-design/icons'
 import { App, Button, Card, Form, Select, Spin, Upload } from 'antd'
 import type { UploadFile } from 'antd/es/upload/interface'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import * as employeesApi from '../../services/employees.service'
 import * as payslipsApi from '../../services/payslips.service'
 import type { EmployeeUser } from '../../types/employees'
 import { getApiErrorMessage } from '../../utils/apiErrorMessage'
+import { EmployeeSelectOptionLabel } from './EmployeeSelectOptionLabel'
 import {
   MAX_PDF_BYTES,
   MONTHS_FR,
@@ -20,6 +21,12 @@ type SingleFormValues = {
   periodYear: number
 }
 
+type EmployeeSelectOption = {
+  value: string
+  label: ReactNode
+  title: string
+}
+
 export function SingleUploadTab() {
   const { message } = App.useApp()
   const [form] = Form.useForm<SingleFormValues>()
@@ -27,9 +34,7 @@ export function SingleUploadTab() {
   const [uploading, setUploading] = useState(false)
   const [searchInput, setSearchInput] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [options, setOptions] = useState<{ value: string; label: string }[]>(
-    [],
-  )
+  const [options, setOptions] = useState<EmployeeSelectOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(false)
 
   useEffect(() => {
@@ -48,7 +53,8 @@ export function SingleUploadTab() {
       setOptions(
         res.data.map((u: EmployeeUser) => ({
           value: u.id,
-          label: formatEmployeeOption(u),
+          label: <EmployeeSelectOptionLabel user={u} />,
+          title: formatEmployeeOption(u),
         })),
       )
     } catch (e) {
