@@ -100,6 +100,8 @@ type AuthContextValue = {
   accessToken: string | null
   refreshToken: string | null
   login: (email: string, password: string) => Promise<void>
+  /** Après inscription ou autre flux qui renvoie déjà les jetons. */
+  signInWithPayload: (payload: AuthSessionPayload) => void
   logout: () => Promise<void>
   /** Met à jour l’utilisateur en mémoire et dans le stockage local (ex. après PATCH profil). */
   setSessionUser: (user: User) => void
@@ -198,6 +200,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'LOGIN_SUCCESS', payload })
   }, [])
 
+  const signInWithPayload = useCallback((payload: AuthSessionPayload) => {
+    saveStoredSession({
+      user: payload.user,
+      accessToken: payload.accessToken,
+      refreshToken: payload.refreshToken,
+    })
+    dispatch({ type: 'LOGIN_SUCCESS', payload })
+  }, [])
+
   const setSessionUser = useCallback((nextUser: User) => {
     updateStoredUser(nextUser)
     dispatch({ type: 'SET_USER', payload: nextUser })
@@ -224,6 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accessToken: state.accessToken,
       refreshToken: state.refreshToken,
       login,
+      signInWithPayload,
       logout,
       setSessionUser,
     }),
@@ -234,6 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       state.accessToken,
       state.refreshToken,
       login,
+      signInWithPayload,
       logout,
       setSessionUser,
     ],

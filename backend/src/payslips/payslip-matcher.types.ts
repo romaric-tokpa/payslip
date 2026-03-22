@@ -16,6 +16,8 @@ export type PayslipMatchResult = {
   confidence: number;
   /** Matricule présent dans le PDF mais sans correspondance en base ; le nom a permis un match. */
   ambiguousMatricule?: boolean;
+  /** Collaborateur sorti : pas d’attribution, message pour l’admin. */
+  lifecycleWarning?: string;
 };
 
 export type PayslipMatchInput = {

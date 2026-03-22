@@ -1,6 +1,7 @@
 import { DownloadOutlined } from '@ant-design/icons'
 import { App, Button, Space } from 'antd'
 import { useNavigate } from 'react-router-dom'
+import { ADMIN_BASE } from '../../constants/adminRoutes'
 import { PageHeader } from '../../components/PageHeader'
 import * as employeesApi from '../../services/employees.service'
 import { getApiErrorMessage } from '../../utils/apiErrorMessage'
@@ -39,8 +40,8 @@ export function ImportPage() {
       <ImportModal
         variant="page"
         open
-        onClose={() => navigate('/employees')}
-        onImportSuccess={() => navigate('/employees')}
+        onClose={() => navigate(`${ADMIN_BASE}/employees`)}
+        onImportSuccess={() => navigate(`${ADMIN_BASE}/employees`)}
       />
     </div>
   )

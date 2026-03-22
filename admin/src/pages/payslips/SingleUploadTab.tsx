@@ -107,7 +107,7 @@ export function SingleUploadTab() {
         form={form}
         layout="vertical"
         requiredMark={false}
-        style={{ width: '100%' }}
+        className="payslip-single-form"
       >
         <div className="payslip-single-grid">
           <div>
@@ -120,6 +120,7 @@ export function SingleUploadTab() {
               <Select
                 showSearch
                 filterOption={false}
+                className="payslip-upload-select"
                 placeholder="Rechercher par matricule, nom ou prénom…"
                 options={options}
                 loading={optionsLoading}
@@ -137,6 +138,7 @@ export function SingleUploadTab() {
               rules={[{ required: true, message: 'Mois requis' }]}
             >
               <Select
+                className="payslip-upload-select"
                 placeholder="Mois"
                 options={MONTHS_FR.map((label, i) => ({
                   value: i + 1,
@@ -151,6 +153,7 @@ export function SingleUploadTab() {
               rules={[{ required: true, message: 'Année requise' }]}
             >
               <Select
+                className="payslip-upload-select"
                 placeholder="Année"
                 options={years.map((y) => ({ value: y, label: String(y) }))}
               />
@@ -193,7 +196,7 @@ export function SingleUploadTab() {
             </Form.Item>
           </div>
         </div>
-        <Form.Item style={{ marginBottom: 0, marginTop: 8 }}>
+        <Form.Item className="payslip-single-submit-wrap">
           <Button
             type="primary"
             block

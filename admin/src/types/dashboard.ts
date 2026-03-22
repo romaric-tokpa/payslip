@@ -14,6 +14,16 @@ export type TopUnreadRow = {
   isRead: boolean
 }
 
+export type ExpiringContractDashboardRow = {
+  userId: string
+  firstName: string
+  lastName: string
+  employeeId: string | null
+  departmentLabel: string | null
+  contractEndDate: string
+  daysRemaining: number
+}
+
 export type DashboardStats = {
   totalEmployees: number
   activeEmployees: number
@@ -25,4 +35,6 @@ export type DashboardStats = {
   unreadPayslips: number
   monthlyUploads: MonthlyUploadStat[]
   topUnread: TopUnreadRow[]
+  expiringContracts: ExpiringContractDashboardRow[]
+  departedThisMonth: number
 }

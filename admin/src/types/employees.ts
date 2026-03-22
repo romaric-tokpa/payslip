@@ -15,6 +15,22 @@ export type OrgServiceBrief = {
   departmentId: string | null
 }
 
+export type EmploymentStatus =
+  | 'PENDING'
+  | 'ACTIVE'
+  | 'ON_NOTICE'
+  | 'DEPARTED'
+  | 'ARCHIVED'
+
+export type ContractType = 'CDI' | 'CDD' | 'INTERIM' | 'STAGE'
+
+export type DepartureType =
+  | 'RESIGNATION'
+  | 'TERMINATION'
+  | 'CONTRACT_END'
+  | 'RETIREMENT'
+  | 'MUTUAL_AGREEMENT'
+
 /** Aligné sur `UserPublic` côté API (GET /users). */
 export type EmployeeUser = {
   id: string
@@ -37,6 +53,17 @@ export type EmployeeUser = {
   createdAt: string
   /** URL présignée (affichage avatar), absente ou null si pas de photo */
   profilePhotoUrl?: string | null
+  employmentStatus: EmploymentStatus
+  contractType?: ContractType | null
+  contractEndDate?: string | null
+  departureType?: DepartureType | null
+  departureReason?: string | null
+  departureDate?: string | null
+  noticeStartDate?: string | null
+  noticeEndDate?: string | null
+  departedAt?: string | null
+  readOnlyUntil?: string | null
+  archivedAt?: string | null
 }
 
 export type EmployeesListMeta = {
@@ -63,6 +90,15 @@ export type GetEmployeesParams = {
   directionId?: string
   /** Statut d’activation (RH) */
   activationStatus?: 'all' | 'active' | 'inactive' | 'pending_password'
+  employmentFilter?:
+    | 'all'
+    | 'active'
+    | 'on_notice'
+    | 'departed'
+    | 'pending'
+    | 'archived'
+  contractType?: 'all' | 'CDI' | 'CDD' | 'INTERIM' | 'STAGE'
+  expiringContracts30d?: boolean
 }
 
 export type CreateEmployeePayload = {
@@ -74,6 +110,9 @@ export type CreateEmployeePayload = {
   position?: string
   departmentId?: string
   serviceId?: string
+  contractType?: ContractType
+  contractEndDate?: string
+  entryDate?: string
 }
 
 export type UpdateEmployeePayload = {
@@ -84,6 +123,9 @@ export type UpdateEmployeePayload = {
   position?: string
   departmentId?: string | null
   serviceId?: string | null
+  contractType?: ContractType | null
+  contractEndDate?: string | null
+  entryDate?: string | null
 }
 
 export type InviteEmployeeResponse = {
@@ -145,6 +187,9 @@ export type UserImportConfigPayload = {
     departement?: string
     service?: string
     poste?: string
+    contractType?: string
+    contractEndDate?: string
+    entryDate?: string
   }
   splitFullName?: {
     column: string
@@ -168,6 +213,32 @@ export type ImportRowDto = {
   serviceName?: string
   directionId?: string
   directionName?: string
+  contractType?: string
+  contractEndDate?: string
+  entryDate?: string
+}
+
+export type InitiateDepartureDto = {
+  departureType: DepartureType
+  departureDate: string
+  reason?: string
+  noticeEndDate?: string
+}
+
+export type BulkDepartureDto = {
+  userIds: string[]
+  departureType: DepartureType
+  departureDate: string
+  reason?: string
+}
+
+export type ReinstateDto = {
+  newContractEndDate?: string
+}
+
+export type ExpiringContractRow = {
+  user: EmployeeUser
+  daysRemaining: number
 }
 
 export type ValidationError = {

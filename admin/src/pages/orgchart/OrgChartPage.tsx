@@ -1,6 +1,7 @@
 import {
   BranchesOutlined,
   PlusOutlined,
+  UnorderedListOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
@@ -12,7 +13,7 @@ import {
   Input,
   Modal,
   Segmented,
-  Space,
+  Spin,
 } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PageHeader } from '../../components/PageHeader'
@@ -33,6 +34,7 @@ import { OrgFormModal } from './OrgFormModal'
 import type { OrgListRow } from './OrgList'
 import { OrgList } from './OrgList'
 import { OrgTree } from './OrgTree'
+import '../employees/employees.css'
 import './org-chart.css'
 
 type ViewMode = 'tree' | 'list'
@@ -436,10 +438,11 @@ export function OrgChartPage() {
 
   if (!isRh) {
     return (
-      <div>
+      <div className="orgchart-page">
         <Alert
           type="info"
           showIcon
+          className="orgchart-access-alert"
           title="Accès réservé"
           description="Seuls les administrateurs RH peuvent consulter et modifier l’organigramme."
         />
@@ -450,53 +453,67 @@ export function OrgChartPage() {
   const companyName = rawTree?.company.name ?? 'votre entreprise'
 
   return (
-    <div>
+    <div className="orgchart-page">
       <PageHeader
         subtitle={`Structure organisationnelle de ${companyName}`}
         actions={
-          <Space wrap size="middle">
-            <Input.Search
-              allowClear
-              placeholder="Rechercher…"
-              style={{ width: 200 }}
-              size="middle"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <Segmented<ViewMode>
-              value={view}
-              onChange={(v) => setView(v)}
-              options={[
-                {
-                  label: (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <BranchesOutlined />
-                      Arbre
-                    </span>
-                  ),
-                  value: 'tree',
-                },
-                { label: 'Liste', value: 'list' },
-              ]}
-              className="orgchart-segmented"
-            />
-            <Dropdown menu={{ items: addMenu }} trigger={['click']}>
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                style={{
-                  background: adminTheme.teal,
-                  borderColor: adminTheme.teal,
-                }}
-              >
-                Ajouter
-              </Button>
-            </Dropdown>
-          </Space>
+          <Dropdown menu={{ items: addMenu }} trigger={['click']}>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              className="employees-btn-primary-teal"
+            >
+              Ajouter
+            </Button>
+          </Dropdown>
         }
       />
 
-      <div className="orgchart-legend">
+      <p className="orgchart-page-lead">
+        Parcourez la hiérarchie directions, départements et services, ou basculez en
+        liste pour trier et modifier. Cliquez sur un bloc pour le détail à droite.
+      </p>
+
+      <section className="orgchart-toolbar" aria-label="Recherche et affichage">
+        <Input.Search
+          allowClear
+          className="orgchart-search"
+          placeholder="Filtrer par nom (direction, département, service)…"
+          size="large"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="employees-view-panel orgchart-view-panel">
+          <span className="employees-view-panel__label">Affichage</span>
+          <Segmented<ViewMode>
+            value={view}
+            onChange={(v) => setView(v)}
+            options={[
+              {
+                label: (
+                  <span className="employees-segment-label">
+                    <BranchesOutlined />
+                    Arbre
+                  </span>
+                ),
+                value: 'tree',
+              },
+              {
+                label: (
+                  <span className="employees-segment-label">
+                    <UnorderedListOutlined />
+                    Liste
+                  </span>
+                ),
+                value: 'list',
+              },
+            ]}
+            className="employees-view-toggle orgchart-segmented"
+          />
+        </div>
+      </section>
+
+      <div className="orgchart-legend orgchart-legend--bar" role="note">
         <div className="orgchart-legend-item">
           <span
             className="orgchart-legend-sq"
@@ -518,9 +535,9 @@ export function OrgChartPage() {
           />
           Service
         </div>
-        <div className="orgchart-legend-item">
-          <UserOutlined style={{ color: adminTheme.gray }} />
-          = nombre de collaborateurs
+        <div className="orgchart-legend-item orgchart-legend-item--hint">
+          <UserOutlined className="orgchart-legend-user-icon" />
+          <span>Nombre de collaborateurs</span>
         </div>
       </div>
 
@@ -535,8 +552,9 @@ export function OrgChartPage() {
         >
           <div className="orgchart-tree-card">
             {loading || !displayTree ? (
-              <div style={{ padding: 24, textAlign: 'center', color: adminTheme.gray }}>
-                Chargement…
+              <div className="orgchart-loading">
+                <Spin size="large" />
+                <span className="orgchart-loading__text">Chargement de l’organigramme…</span>
               </div>
             ) : view === 'tree' ? (
               <OrgTree

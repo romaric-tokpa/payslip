@@ -55,6 +55,9 @@ export function buildMappingsPayload(
     departement?: string
     service?: string
     poste?: string
+    contractType?: string
+    contractEndDate?: string
+    entryDate?: string
   } = {
     matricule: mapping.matricule ?? '',
     email: mapping.email ?? '',
@@ -70,6 +73,15 @@ export function buildMappingsPayload(
   }
   if (mapping.poste) {
     mappings.poste = mapping.poste
+  }
+  if (mapping.contractType) {
+    mappings.contractType = mapping.contractType
+  }
+  if (mapping.contractEndDate) {
+    mappings.contractEndDate = mapping.contractEndDate
+  }
+  if (mapping.entryDate) {
+    mappings.entryDate = mapping.entryDate
   }
   if (!split) {
     mappings.prenom = mapping.prenom ?? ''

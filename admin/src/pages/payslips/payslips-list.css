@@ -1,29 +1,235 @@
+/* —— Page —— */
+.payslips-page {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2px 32px;
+}
+
+.payslips-page-lead {
+  margin: -8px 0 20px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #5a6c7d;
+  font-weight: 500;
+  max-width: 720px;
+}
+
+/* —— Toolbar —— */
+.payslips-toolbar {
+  margin-bottom: 20px;
+  padding: 20px 20px 18px;
+  background: linear-gradient(165deg, #ffffff 0%, #fafcfd 100%);
+  border: 1px solid rgba(28, 40, 51, 0.08);
+  border-radius: 16px;
+  box-shadow:
+    0 4px 20px rgba(28, 40, 51, 0.05),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset;
+}
+
+.payslips-toolbar__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin-bottom: 16px;
+}
+
+/* Précision > .employees-filter-select { width: 100% } (employees.css) */
+.payslips-toolbar__filters .employees-filter-select.payslips-filter-year {
+  width: 120px;
+  max-width: 120px;
+  flex: 0 0 auto;
+}
+
+.payslips-toolbar__filters .employees-filter-select.payslips-filter-month {
+  width: 160px;
+  max-width: 180px;
+  flex: 0 0 auto;
+}
+
+.payslips-toolbar__filters .employees-filter-select.payslips-filter-employee {
+  flex: 1 1 240px;
+  min-width: min(100%, 220px);
+  max-width: 440px;
+  width: auto !important;
+}
+
+.payslips-reset-filters {
+  flex-shrink: 0;
+  border-radius: 10px !important;
+  font-weight: 600;
+  border-color: rgba(28, 40, 51, 0.12) !important;
+}
+
+.payslips-reset-filters:hover {
+  border-color: #0f5c5e !important;
+  color: #0f5c5e !important;
+}
+
+.payslips-toolbar__stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(28, 40, 51, 0.06);
+}
+
+.payslips-stat-tag {
+  margin: 0 !important;
+  padding: 5px 12px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(28, 40, 51, 0.08) !important;
+  background: rgba(28, 40, 51, 0.04) !important;
+  color: #5a6c7d !important;
+}
+
+.payslips-stat-tag--primary {
+  background: rgba(15, 92, 94, 0.1) !important;
+  border-color: rgba(15, 92, 94, 0.2) !important;
+  color: #0f5c5e !important;
+}
+
+.payslips-stat-tag--warning {
+  background: rgba(230, 126, 34, 0.12) !important;
+  border-color: rgba(230, 126, 34, 0.35) !important;
+  color: #c45f00 !important;
+}
+
+.payslips-view-panel {
+  margin-bottom: 18px;
+}
+
+/* —— Liste / chargement —— */
+.payslips-table-shell {
+  border-radius: 16px;
+  border: 1px solid rgba(28, 40, 51, 0.08);
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 4px 20px rgba(28, 40, 51, 0.05);
+}
+
+.payslips-main-table .ant-table {
+  font-size: 15px;
+}
+
+.payslips-main-table .ant-table-thead > tr > th {
+  background: linear-gradient(180deg, #f8fafb 0%, #f4f6f7 100%) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: #5a6c7d !important;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid rgba(28, 40, 51, 0.08) !important;
+  padding: 14px 16px !important;
+}
+
+.payslips-main-table .ant-table-tbody > tr > td {
+  padding: 14px 16px !important;
+  border-bottom: 1px solid rgba(28, 40, 51, 0.05) !important;
+  vertical-align: middle;
+}
+
+.payslips-main-table .ant-table-tbody > tr:hover > td {
+  background: rgba(15, 92, 94, 0.04) !important;
+}
+
+.payslips-table-avatar.ant-avatar {
+  background: linear-gradient(145deg, #e8f5f5 0%, #d4ecec 100%) !important;
+  color: #0f5c5e !important;
+  font-weight: 700 !important;
+  border: 1px solid rgba(15, 92, 94, 0.12);
+}
+
+.payslips-table-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: #1c2833;
+  letter-spacing: -0.02em;
+}
+
+/* —— Accordéons par mois —— */
 .payslips-by-month {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.payslips-collapse.ant-collapse {
+  background: transparent;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.payslips-by-month .ant-collapse {
-  background: transparent;
-}
-
-.payslips-by-month .ant-collapse-item {
-  border-radius: 10px !important;
-  border: 1px solid #e8e8e8 !important;
-  margin-bottom: 0;
+.payslips-collapse .ant-collapse-item {
+  border-radius: 16px !important;
+  border: 1px solid rgba(28, 40, 51, 0.08) !important;
+  margin-bottom: 0 !important;
   overflow: hidden;
   background: #ffffff;
+  box-shadow: 0 4px 18px rgba(28, 40, 51, 0.05);
+  transition:
+    box-shadow 0.22s ease,
+    border-color 0.22s ease;
 }
 
-.payslips-by-month .ant-collapse-header {
+.payslips-collapse .ant-collapse-item:hover {
+  border-color: rgba(15, 92, 94, 0.15) !important;
+  box-shadow: 0 8px 26px rgba(28, 40, 51, 0.07);
+}
+
+.payslips-collapse .ant-collapse-header {
   align-items: center !important;
-  padding: 12px 16px !important;
-  font-size: 15px;
+  padding: 16px 18px !important;
+  background: linear-gradient(180deg, #fafcfd 0%, #ffffff 100%);
+  border-bottom: 1px solid rgba(28, 40, 51, 0.06);
 }
 
-.payslips-by-month .ant-collapse-content-box {
-  padding: 0 16px 16px !important;
+.payslips-collapse .ant-collapse-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.payslips-collapse .ant-collapse-expand-icon {
+  color: #0f5c5e !important;
+}
+
+.payslips-collapse .ant-collapse-content {
+  border-top: none !important;
+}
+
+.payslips-collapse .ant-collapse-content-box {
+  padding: 0 12px 16px !important;
+}
+
+.payslips-collapse-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  width: 100%;
+}
+
+.payslips-collapse-header__title {
+  font-size: 17px;
+  font-weight: 800;
+  color: #1c2833;
+  letter-spacing: -0.03em;
+}
+
+.payslips-collapse-header__count {
+  margin: 0 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  padding: 4px 12px !important;
+  border-radius: 8px !important;
+  border: none !important;
+  background: rgba(15, 92, 94, 0.12) !important;
+  color: #0f5c5e !important;
 }
 
 .payslips-by-month .payslips-month-table .ant-table {
@@ -31,5 +237,25 @@
 }
 
 .payslips-by-month .payslips-month-table .ant-table-thead > tr > th {
-  background: #f8f9fa !important;
+  background: #f4f7f8 !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: #5a6c7d !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(28, 40, 51, 0.08) !important;
+  padding: 12px 14px !important;
+}
+
+.payslips-by-month .payslips-month-table .ant-table-tbody > tr > td {
+  padding: 12px 14px !important;
+  border-bottom: 1px solid rgba(28, 40, 51, 0.05) !important;
+}
+
+.payslips-by-month .payslips-month-table .ant-table-tbody > tr:hover > td {
+  background: rgba(15, 92, 94, 0.04) !important;
+}
+
+.payslips-by-month .payslips-month-table .ant-table-tbody > tr:last-child > td {
+  border-bottom: none !important;
 }

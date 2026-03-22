@@ -7,8 +7,10 @@ import * as auditApi from '../../services/audit.service'
 import * as employeesApi from '../../services/employees.service'
 import type { AuditLog } from '../../types/audit'
 import type { EmployeeUser } from '../../types/employees'
+import { PageHeader } from '../../components/PageHeader'
 import { getApiErrorMessage } from '../../utils/apiErrorMessage'
 import { formatAuditDetail } from './auditDetail'
+import '../employees/employees.css'
 import './audit.css'
 
 const { RangePicker } = DatePicker
@@ -259,51 +261,61 @@ export function AuditPage() {
 
   return (
     <div className="audit-page">
-      <div className="audit-filters">
-        <RangePicker
-          className="audit-range-picker"
-          value={range}
-          onChange={(d) => setRange(d)}
-          format="DD/MM/YYYY"
-          allowEmpty={[true, true]}
-        />
-        <Select
-          allowClear
-          placeholder="Type d'action"
-          className="audit-filter-select"
-          style={{ minWidth: 200 }}
-          options={actionSelectOptions}
-          value={actionFilter}
-          onChange={(v) => setActionFilter(v)}
-          popupMatchSelectWidth={false}
-        />
-        <Select
-          showSearch
-          allowClear
-          placeholder="Utilisateur"
-          className="audit-filter-select"
-          style={{ minWidth: 240 }}
-          filterOption={false}
-          loading={userOptionsLoading}
-          options={userOptions}
-          value={userIdFilter}
-          onSearch={setUserSearch}
-          onChange={(v) => setUserIdFilter(v)}
-          notFoundContent={
-            userOptionsLoading ? <Spin size="small" /> : 'Aucun résultat'
-          }
-        />
-        <div className="audit-filters__grow" aria-hidden />
-        <Button
-          variant="outlined"
-          icon={<DownloadOutlined />}
-          loading={exporting}
-          onClick={() => void handleExportCsv()}
-          className="audit-btn-outline"
-        >
-          Exporter CSV
-        </Button>
-      </div>
+      <PageHeader
+        actions={
+          <Button
+            variant="outlined"
+            icon={<DownloadOutlined />}
+            loading={exporting}
+            onClick={() => void handleExportCsv()}
+            className="audit-btn-export"
+          >
+            Exporter CSV
+          </Button>
+        }
+      />
+
+      <p className="audit-page-lead">
+        Historique des actions sensibles (connexions, bulletins, comptes). Filtrez
+        par période, type d’événement ou collaborateur ; l’export reprend les mêmes
+        critères.
+      </p>
+
+      <section className="audit-toolbar" aria-label="Filtres du journal">
+        <div className="audit-toolbar__filters">
+          <RangePicker
+            className="audit-range-picker"
+            value={range}
+            onChange={(d) => setRange(d)}
+            format="DD/MM/YYYY"
+            allowEmpty={[true, true]}
+          />
+          <Select
+            allowClear
+            placeholder="Type d'action"
+            className="employees-filter-select audit-filter-action"
+            options={actionSelectOptions}
+            value={actionFilter}
+            onChange={(v) => setActionFilter(v)}
+            popupMatchSelectWidth={false}
+          />
+          <Select
+            showSearch
+            allowClear
+            placeholder="Utilisateur"
+            className="employees-filter-select audit-filter-user"
+            filterOption={false}
+            loading={userOptionsLoading}
+            options={userOptions}
+            value={userIdFilter}
+            onSearch={setUserSearch}
+            onChange={(v) => setUserIdFilter(v)}
+            notFoundContent={
+              userOptionsLoading ? <Spin size="small" /> : 'Aucun résultat'
+            }
+          />
+        </div>
+      </section>
 
       <Card className="audit-table-card" variant="outlined">
         <Table<AuditLog>

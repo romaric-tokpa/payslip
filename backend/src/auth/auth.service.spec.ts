@@ -61,6 +61,8 @@ describe('AuthService', () => {
     role: 'RH_ADMIN',
     passwordHash: 'bcrypt-hash',
     isActive: true,
+    mustChangePassword: false,
+    tempPasswordExpiresAt: null,
     employeeId: null,
     department: null,
     departmentId: null,
@@ -69,6 +71,18 @@ describe('AuthService', () => {
     profilePhotoKey: null,
     entryDate: null,
     createdAt: new Date('2025-01-01T00:00:00.000Z'),
+    employmentStatus: 'ACTIVE',
+    contractType: null,
+    contractEndDate: null,
+    departureType: null,
+    departureReason: null,
+    departureDate: null,
+    noticeStartDate: null,
+    noticeEndDate: null,
+    departedAt: null,
+    departedById: null,
+    readOnlyUntil: null,
+    archivedAt: null,
   });
 
   beforeEach(async () => {
@@ -246,6 +260,9 @@ describe('AuthService', () => {
     it('rejette avec 423 si compte verrouillé / inactif', async () => {
       const locked = { ...baseUser(), isActive: false };
       users.findByEmail.mockResolvedValue(locked);
+      jest.mocked(bcrypt.compare).mockResolvedValue(true as never);
+      prisma.auditLog.findFirst.mockResolvedValue(null);
+      prisma.auditLog.count.mockResolvedValue(0);
 
       try {
         await service.login('rh@entreprise.com', 'any');
@@ -266,6 +283,7 @@ describe('AuthService', () => {
       role: 'EMPLOYEE',
       employeeId: 'EMP-001',
       email: 'collab@entreprise.com',
+      employmentStatus: 'ACTIVE',
     });
 
     it('réussit avec matricule + mot de passe corrects', async () => {
@@ -491,6 +509,8 @@ describe('AuthService', () => {
       role: 'EMPLOYEE',
       passwordHash: 'h',
       isActive: false,
+      mustChangePassword: false,
+      tempPasswordExpiresAt: null,
       employeeId: 'E1',
       department: null,
       departmentId: null,
@@ -499,6 +519,18 @@ describe('AuthService', () => {
       profilePhotoKey: null,
       entryDate: null,
       createdAt: new Date(),
+      employmentStatus: 'PENDING',
+      contractType: null,
+      contractEndDate: null,
+      departureType: null,
+      departureReason: null,
+      departureDate: null,
+      noticeStartDate: null,
+      noticeEndDate: null,
+      departedAt: null,
+      departedById: null,
+      readOnlyUntil: null,
+      archivedAt: null,
     };
 
     it('émet un nouveau code et remplace les sessions INVITATION', async () => {
@@ -574,6 +606,8 @@ describe('AuthService', () => {
       role: 'EMPLOYEE',
       passwordHash: 'old',
       isActive: false,
+      mustChangePassword: false,
+      tempPasswordExpiresAt: null,
       employeeId: 'E1',
       department: null,
       departmentId: null,
@@ -582,6 +616,18 @@ describe('AuthService', () => {
       profilePhotoKey: null,
       entryDate: null,
       createdAt: new Date(),
+      employmentStatus: 'PENDING',
+      contractType: null,
+      contractEndDate: null,
+      departureType: null,
+      departureReason: null,
+      departureDate: null,
+      noticeStartDate: null,
+      noticeEndDate: null,
+      departedAt: null,
+      departedById: null,
+      readOnlyUntil: null,
+      archivedAt: null,
     };
 
     it('active le compte et retourne les tokens', async () => {
@@ -602,6 +648,9 @@ describe('AuthService', () => {
               update: jest.fn().mockResolvedValue({
                 ...emp,
                 isActive: true,
+                employmentStatus: 'ACTIVE',
+                mustChangePassword: false,
+                tempPasswordExpiresAt: null,
                 passwordHash: 'hashed-password',
               }),
             },
@@ -641,6 +690,9 @@ describe('AuthService', () => {
               update: jest.fn().mockResolvedValue({
                 ...emp,
                 isActive: true,
+                employmentStatus: 'ACTIVE',
+                mustChangePassword: false,
+                tempPasswordExpiresAt: null,
                 passwordHash: 'hashed-password',
               }),
             },

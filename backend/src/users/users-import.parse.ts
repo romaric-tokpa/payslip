@@ -98,6 +98,27 @@ const IMPORT_KEY_ALIASES: Record<string, string> = {
   team: 'service',
   cellule: 'service',
   pool: 'service',
+  'type contrat': 'contract_type',
+  typecontrat: 'contract_type',
+  type_contrat: 'contract_type',
+  'contract type': 'contract_type',
+  contrat: 'contract_type',
+  'nature contrat': 'contract_type',
+  'fin contrat': 'contract_end_date',
+  fincontrat: 'contract_end_date',
+  fin_contrat: 'contract_end_date',
+  'contract end': 'contract_end_date',
+  echeance: 'contract_end_date',
+  échéance: 'contract_end_date',
+  'fin cdd': 'contract_end_date',
+  'end date': 'contract_end_date',
+  'date entree': 'entry_date',
+  'date d entree': 'entry_date',
+  'date embauche': 'entry_date',
+  'entry date': 'entry_date',
+  'hire date': 'entry_date',
+  'start date': 'entry_date',
+  'date debut': 'entry_date',
 };
 
 function compactKey(normalizedKey: string): string {
@@ -185,6 +206,35 @@ function guessCanonicalFromCompact(c: string): string | null {
     c === 'job'
   ) {
     return 'poste';
+  }
+  if (
+    c.includes('typecontrat') ||
+    (c.includes('contrat') && c.includes('type')) ||
+    c === 'contrat' ||
+    c.includes('naturecontrat')
+  ) {
+    return 'contract_type';
+  }
+  if (
+    c.includes('fincontrat') ||
+    c.includes('contractend') ||
+    c.includes('finecdd') ||
+    (c.includes('fin') && c.includes('contrat')) ||
+    c.includes('echeance') ||
+    c === 'enddate'
+  ) {
+    return 'contract_end_date';
+  }
+  if (
+    (c.includes('entree') ||
+      c.includes('embauche') ||
+      c.includes('hiredate') ||
+      (c.includes('start') && c.includes('date')) ||
+      (c.includes('debut') && !c.includes('fin'))) &&
+    !c.includes('fincontrat') &&
+    !c.includes('contractend')
+  ) {
+    return 'entry_date';
   }
   return null;
 }
@@ -323,6 +373,9 @@ export function extractImportFields(row: NormalizedImportRow): {
   departement: string;
   service: string;
   poste: string;
+  contractType: string;
+  contractEndDate: string;
+  entryDate: string;
 } {
   return {
     matricule: row['matricule'] ?? '',
@@ -333,6 +386,9 @@ export function extractImportFields(row: NormalizedImportRow): {
     departement: row['departement'] ?? '',
     service: row['service'] ?? '',
     poste: row['poste'] ?? '',
+    contractType: row['contract_type'] ?? '',
+    contractEndDate: row['contract_end_date'] ?? '',
+    entryDate: row['entry_date'] ?? '',
   };
 }
 
@@ -348,6 +404,9 @@ export type ImportMappingsInput = {
   service?: string;
   direction?: string;
   poste?: string;
+  contractType?: string;
+  contractEndDate?: string;
+  entryDate?: string;
 };
 
 export type SplitFullNameInput = {
@@ -432,6 +491,9 @@ export function rowFromExplicitMappings(
     departement: getMappedCell(row, mappings.departement ?? ''),
     service: getMappedCell(row, mappings.service ?? ''),
     poste: getMappedCell(row, mappings.poste ?? ''),
+    contract_type: getMappedCell(row, mappings.contractType ?? ''),
+    contract_end_date: getMappedCell(row, mappings.contractEndDate ?? ''),
+    entry_date: getMappedCell(row, mappings.entryDate ?? ''),
   };
 }
 

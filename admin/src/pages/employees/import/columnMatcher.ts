@@ -21,6 +21,9 @@ export type MappingTargetId =
   | 'service'
   | 'poste'
   | 'nomComplet'
+  | 'contractType'
+  | 'contractEndDate'
+  | 'entryDate'
 
 const ALIAS_PHRASES: Record<MappingTargetId, readonly string[]> = {
   matricule: [
@@ -111,6 +114,44 @@ const ALIAS_PHRASES: Record<MappingTargetId, readonly string[]> = {
     'fullname',
     'collaborateur',
   ],
+  contractType: [
+    'type contrat',
+    'type_contrat',
+    'type de contrat',
+    'contract type',
+    'contrat',
+    'nature contrat',
+    'nature du contrat',
+  ],
+  contractEndDate: [
+    'fin contrat',
+    'date fin',
+    'date de fin',
+    'date fin contrat',
+    'fin de contrat',
+    'contract end',
+    'end date',
+    'echeance',
+    'échéance',
+    'fin cdd',
+    'date echeance',
+    'date échéance',
+    'expiration',
+  ],
+  entryDate: [
+    'date entree',
+    "date d'entree",
+    "date d'entrée",
+    'date embauche',
+    'entry date',
+    'hire date',
+    'start date',
+    'date debut',
+    'date début',
+    'debut',
+    'début',
+    'embauche',
+  ],
 }
 
 const ALIAS_COMPACT: Record<MappingTargetId, readonly string[]> = {
@@ -123,6 +164,9 @@ const ALIAS_COMPACT: Record<MappingTargetId, readonly string[]> = {
   service: ALIAS_PHRASES.service.map((p) => compactForMatch(p)),
   poste: ALIAS_PHRASES.poste.map((p) => compactForMatch(p)),
   nomComplet: ALIAS_PHRASES.nomComplet.map((p) => compactForMatch(p)),
+  contractType: ALIAS_PHRASES.contractType.map((p) => compactForMatch(p)),
+  contractEndDate: ALIAS_PHRASES.contractEndDate.map((p) => compactForMatch(p)),
+  entryDate: ALIAS_PHRASES.entryDate.map((p) => compactForMatch(p)),
 }
 
 function scoreHeaderForTarget(
@@ -159,6 +203,9 @@ const ASSIGN_ORDER: MappingTargetId[] = [
   'departement',
   'service',
   'poste',
+  'contractType',
+  'contractEndDate',
+  'entryDate',
 ]
 
 export type SuggestedColumnMappings = Record<MappingTargetId, string | undefined>
@@ -178,6 +225,9 @@ export function suggestColumnMappings(headers: string[]): SuggestedColumnMapping
     service: undefined,
     poste: undefined,
     nomComplet: undefined,
+    contractType: undefined,
+    contractEndDate: undefined,
+    entryDate: undefined,
   }
 
   const candidates = headers.map((h) => ({

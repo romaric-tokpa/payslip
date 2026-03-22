@@ -1,4 +1,4 @@
-import { App, Space } from 'antd'
+import { App } from 'antd'
 import { useCallback, useRef, useState } from 'react'
 import * as payslipsApi from '../../../services/payslips.service'
 import type { BulkAnalyzeRow, BulkUploadReport } from '../../../types/payslips'
@@ -92,7 +92,7 @@ export function BulkUploadFlow() {
   }
 
   return (
-    <Space orientation="vertical" size="large" style={{ width: '100%' }}>
+    <div className="payslip-bulk-flow">
       <BulkUploadStepper current={step} />
 
       {step === 0 ? (
@@ -131,6 +131,6 @@ export function BulkUploadFlow() {
           onRetryTechnicalFailures={handleRetryTechnicalFailures}
         />
       ) : null}
-    </Space>
+    </div>
   )
 }

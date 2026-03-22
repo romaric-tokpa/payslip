@@ -125,7 +125,7 @@ export function BulkAnalysisStep({
             <div className="bulk-analysis-icon-wrap">
               <FilePdfOutlined />
             </div>
-            <Title level={5} className="bulk-analysis-title" style={{ margin: 0 }}>
+            <Title level={5} className="bulk-analysis-title">
               Déposez vos bulletins de paie ici
             </Title>
             <p className="bulk-analysis-sub">
@@ -140,14 +140,14 @@ export function BulkAnalysisStep({
       </div>
 
       {errorItems.length > 0 ? (
-        <div style={{ marginTop: 16 }}>
+        <div className="payslip-bulk-errors">
           {errorItems.map((f) => (
             <Alert
               key={f.uid}
               type="error"
               showIcon
               closable={false}
-              style={{ marginBottom: 8 }}
+              className="payslip-bulk-error-alert"
               message={
                 <Text strong ellipsis={{ tooltip: f.name }}>
                   {f.name}
@@ -170,10 +170,10 @@ export function BulkAnalysisStep({
             description="Analyse des bulletins en cours..."
           />
           <Progress
+            className="payslip-bulk-progress"
             percent={progress}
             status="active"
             strokeColor="#0F5C5E"
-            style={{ marginTop: 20 }}
           />
         </div>
       ) : null}

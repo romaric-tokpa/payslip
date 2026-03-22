@@ -8,6 +8,9 @@ export type MappingSelection = {
   service?: string
   poste?: string
   nomComplet?: string
+  contractType?: string
+  contractEndDate?: string
+  entryDate?: string
 }
 
 function isMapped(

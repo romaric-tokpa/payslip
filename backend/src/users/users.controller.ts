@@ -45,13 +45,18 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { SkipThrottle } from '@nestjs/throttler';
+import { Throttle } from '../common/decorators/throttle.decorator';
 import {
+  ArchiveDepartedUserDto,
   BulkActivateDto,
   BulkActivateResponseDto,
+  BulkDepartureDto,
   CommitImportBodyDto,
   CreateUserDto,
   ImportResultDto,
+  InitiateDepartureDto,
   QueryUsersDto,
+  ReinstateDto,
   UpdateUserDto,
   UserResponseDto,
   ValidateImportBodyDto,
@@ -62,6 +67,7 @@ import { importEmployeesMulterOptions } from './users-import.multer';
 import { ProfilePhotoValidationPipe } from './pipes/profile-photo-file.pipe';
 import { profilePhotoMulterOptions } from './users-profile-photo.multer';
 import { buildEmployeeImportTemplateXlsx } from './users-import-template.workbook';
+import { DepartureService } from './departure.service';
 import { UserImportJobService } from './user-import-job.service';
 import { UsersService } from './users.service';
 
@@ -73,6 +79,7 @@ export class UsersController {
   constructor(
     private readonly users: UsersService,
     private readonly importJobs: UserImportJobService,
+    private readonly departure: DepartureService,
     @Inject(forwardRef(() => AuthService))
     private readonly auth: AuthService,
   ) {}
@@ -101,6 +108,8 @@ export class UsersController {
   }
 
   @Get()
+  /** Kanban et rechargements admin enchaînent plusieurs pages : plafond plus haut que le défaut global. */
+  @Throttle(1000, 60)
   @Roles('RH_ADMIN', 'SUPER_ADMIN')
   @ApiOperation({
     summary: 'Liste paginée des collaborateurs',
@@ -458,6 +467,35 @@ export class UsersController {
     return this.users.bulkActivate(admin, dto);
   }
 
+  @Get('expiring-contracts')
+  @Roles('RH_ADMIN')
+  @ApiOperation({ summary: 'Contrats CDD / intérim / stage à échéance' })
+  @ApiOkResponse()
+  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse()
+  async expiringContracts(
+    @CurrentUser() admin: RequestUser,
+    @Query('days') days?: string,
+  ) {
+    const n = days != null ? Number(days) : 30;
+    const d = Number.isFinite(n) && n > 0 && n <= 366 ? Math.floor(n) : 30;
+    return this.departure.getExpiringContracts(admin.companyId!, d);
+  }
+
+  @Post('bulk-depart')
+  @HttpCode(HttpStatus.OK)
+  @Roles('RH_ADMIN')
+  @ApiOperation({ summary: 'Départ en masse' })
+  @ApiOkResponse()
+  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse()
+  bulkDepart(
+    @Body() dto: BulkDepartureDto,
+    @CurrentUser() admin: RequestUser,
+  ) {
+    return this.departure.bulkDepart(dto, admin.companyId!, admin.id);
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Détail utilisateur',
@@ -540,5 +578,61 @@ export class UsersController {
     @CurrentUser() actor: RequestUser,
   ) {
     return this.users.updateForRhAdmin(actor, id, dto);
+  }
+
+  @Post(':id/depart')
+  @HttpCode(HttpStatus.OK)
+  @Roles('RH_ADMIN')
+  @ApiOperation({ summary: 'Enregistrer le départ d’un collaborateur' })
+  @ApiOkResponse()
+  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse()
+  async initiateDepart(
+    @Param('id') id: string,
+    @Body() dto: InitiateDepartureDto,
+    @CurrentUser() admin: RequestUser,
+  ) {
+    await this.departure.initiateDepart(id, dto, admin.companyId!, admin.id);
+    return this.users.findOneForActor(admin, id);
+  }
+
+  @Post(':id/reinstate')
+  @HttpCode(HttpStatus.OK)
+  @Roles('RH_ADMIN')
+  @ApiOperation({ summary: 'Réintégrer un collaborateur sorti ou en préavis' })
+  @ApiOkResponse()
+  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse()
+  async reinstate(
+    @Param('id') id: string,
+    @Body() dto: ReinstateDto,
+    @CurrentUser() admin: RequestUser,
+  ) {
+    await this.departure.reinstate(
+      id,
+      admin.companyId!,
+      admin.id,
+      dto.newContractEndDate,
+    );
+    return this.users.findOneForActor(admin, id);
+  }
+
+  @Post(':id/archive')
+  @HttpCode(HttpStatus.OK)
+  @Roles('RH_ADMIN')
+  @ApiOperation({
+    summary: 'Archiver un collaborateur DEPARTED (purge compte, bulletins conservés)',
+  })
+  @ApiOkResponse()
+  @ApiBadRequestResponse()
+  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse()
+  async archiveDeparted(
+    @Param('id') id: string,
+    @Body() _dto: ArchiveDepartedUserDto,
+    @CurrentUser() admin: RequestUser,
+  ) {
+    await this.departure.archiveDepartedUser(id, admin.companyId!, admin.id);
+    return this.users.findOneForActor(admin, id);
   }
 }

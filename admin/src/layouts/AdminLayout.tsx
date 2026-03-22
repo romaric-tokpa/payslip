@@ -12,7 +12,9 @@ import { Avatar, Breadcrumb, Dropdown, Layout, Menu, Space, Tag } from 'antd'
 import dayjs from 'dayjs'
 import 'dayjs/locale/fr'
 import { useMemo, useState } from 'react'
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { AnimatedMainOutlet } from '../components/transitions/RouteTransitions'
+import { ADMIN_BASE } from '../constants/adminRoutes'
 import { useAuth } from '../contexts/AuthContext'
 import { adminTheme } from '../theme/adminTheme'
 import './AdminLayout.css'
@@ -21,80 +23,64 @@ dayjs.locale('fr')
 
 const { Header, Sider, Content } = Layout
 
+/** Aligné sur `width` / `collapsedWidth` du Sider — marge du contenu quand le Sider est `position: fixed`. */
+const SIDER_EXPANDED_PX = 220
+const SIDER_COLLAPSED_PX = 56
+
 type MenuItem = Required<MenuProps>['items'][number]
 
-function PayslipSidebarLogoMark() {
-  return (
-    <svg
-      className="admin-sider-logo-svg"
-      width={32}
-      height={32}
-      viewBox="0 0 32 32"
-      aria-hidden
-    >
-      <circle cx={16} cy={16} r={12} fill={adminTheme.tealLight} />
-      <text
-        x={9.5}
-        y={21.5}
-        fill={adminTheme.white}
-        fontSize={14}
-        fontWeight={700}
-        fontFamily="system-ui, -apple-system, BlinkMacSystemFont, sans-serif"
-      >
-        P
-      </text>
-      <rect
-        x={19}
-        y={11}
-        width={2.5}
-        height={10}
-        rx={1.25}
-        fill={adminTheme.orange}
-      />
-      <circle cx={20.25} cy={9} r={2} fill={adminTheme.orange} />
-    </svg>
-  )
-}
+const D = ADMIN_BASE
 
 const topMenuSelectableKeys = new Set([
-  '/',
-  '/employees',
-  '/payslips',
-  '/payslips/upload',
-  '/orgchart',
-  '/audit',
+  D,
+  `${D}/employees`,
+  `${D}/payslips`,
+  `${D}/payslips/upload`,
+  `${D}/orgchart`,
+  `${D}/audit`,
 ])
 
 /** Entrées plates : chaque clé est une route (les sous-menus sans route ne déclenchent pas `navigate`). */
 const topMenuItems: MenuItem[] = [
-  { key: '/', icon: <AppstoreOutlined />, label: 'Dashboard' },
-  { key: '/employees', icon: <TeamOutlined />, label: 'Collaborateurs' },
+  { key: D, icon: <AppstoreOutlined />, label: 'Dashboard' },
+  { key: `${D}/employees`, icon: <TeamOutlined />, label: 'Collaborateurs' },
   {
-    key: '/payslips',
+    key: `${D}/payslips`,
     icon: <FileProtectOutlined />,
     label: 'Bulletins',
   },
   {
-    key: '/payslips/upload',
+    key: `${D}/payslips/upload`,
     icon: <CloudUploadOutlined />,
     label: 'Upload',
   },
   {
-    key: '/orgchart',
+    key: `${D}/orgchart`,
     icon: <ApartmentOutlined />,
     label: 'Organigramme',
   },
-  { key: '/audit', icon: <UnorderedListOutlined />, label: 'Logs' },
+  { key: `${D}/audit`, icon: <UnorderedListOutlined />, label: 'Logs' },
 ]
 
 const settingsMenuItem: MenuItem = {
-  key: '/settings',
+  key: `${D}/settings`,
   icon: <SettingOutlined />,
   label: 'Paramètres',
 }
 
+/** Chemin logique sous `/dashboard` (ex. `/employees`) pour titres et fil d’Ariane. */
+function adminRelativePath(pathname: string): string {
+  if (pathname === D || pathname === `${D}/`) {
+    return '/'
+  }
+  if (pathname.startsWith(`${D}/`)) {
+    return pathname.slice(D.length)
+  }
+  return pathname
+}
+
 function pageHeaderForPath(pathname: string): { title: string; subtitle?: string } {
-  const p = pathname === '' ? '/' : pathname
+  const p = adminRelativePath(pathname)
   if (p === '/') {
     return { title: 'Dashboard', subtitle: 'Vue d’ensemble' }
   }
@@ -129,10 +115,10 @@ function pageHeaderForPath(pathname: string): { title: string; subtitle?: string
 function breadcrumbItemsForPath(
   pathname: string,
 ): NonNullable<BreadcrumbProps['items']> {
-  const p = pathname === '' ? '/' : pathname
+  const p = adminRelativePath(pathname)
 
   const dash: NonNullable<BreadcrumbProps['items']>[number] = {
-    title: <Link to="/">Dashboard</Link>,
+    title: <Link to={D}>Dashboard</Link>,
   }
 
   if (p === '/') {
@@ -142,7 +128,7 @@ function breadcrumbItemsForPath(
   if (p.startsWith('/employees/import')) {
     return [
       dash,
-      { title: <Link to="/employees">Collaborateurs</Link> },
+      { title: <Link to={`${D}/employees`}>Collaborateurs</Link> },
     ]
   }
   if (p.startsWith('/employees')) {
@@ -151,7 +137,7 @@ function breadcrumbItemsForPath(
   if (p.startsWith('/payslips/upload')) {
     return [
       dash,
-      { title: <Link to="/payslips">Bulletins</Link> },
+      { title: <Link to={`${D}/payslips`}>Bulletins</Link> },
     ]
   }
   if (p.startsWith('/payslips')) {
@@ -171,25 +157,28 @@ function breadcrumbItemsForPath(
 }
 
 function selectedMenuKey(pathname: string): string {
-  if (pathname.startsWith('/settings')) {
-    return '/settings'
+  if (pathname.startsWith(`${D}/settings`)) {
+    return `${D}/settings`
   }
-  if (pathname.startsWith('/audit')) {
-    return '/audit'
+  if (pathname.startsWith(`${D}/audit`)) {
+    return `${D}/audit`
   }
-  if (pathname.startsWith('/orgchart') || pathname.startsWith('/organization')) {
-    return '/orgchart'
+  if (
+    pathname.startsWith(`${D}/orgchart`) ||
+    pathname.startsWith(`${D}/organization`)
+  ) {
+    return `${D}/orgchart`
   }
-  if (pathname.startsWith('/payslips/upload')) {
-    return '/payslips/upload'
+  if (pathname.startsWith(`${D}/payslips/upload`)) {
+    return `${D}/payslips/upload`
   }
-  if (pathname.startsWith('/payslips')) {
-    return '/payslips'
+  if (pathname.startsWith(`${D}/payslips`)) {
+    return `${D}/payslips`
   }
-  if (pathname.startsWith('/employees')) {
-    return '/employees'
+  if (pathname.startsWith(`${D}/employees`)) {
+    return `${D}/employees`
   }
-  return '/'
+  return D
 }
 
 function adminInitials(
@@ -224,7 +213,7 @@ export function AdminLayout() {
   )
 
   const settingsSelectedKeys = useMemo(
-    () => (menuKey === '/settings' ? ['/settings'] : []),
+    () => (menuKey === `${D}/settings` ? [`${D}/settings`] : []),
     [menuKey],
   )
 
@@ -267,28 +256,31 @@ export function AdminLayout() {
   )
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout className="admin-root-layout" style={{ minHeight: '100vh' }}>
       <Sider
         className="admin-sider"
         collapsible
         collapsed={collapsed}
         onCollapse={setCollapsed}
-        width={220}
-        collapsedWidth={56}
+        width={SIDER_EXPANDED_PX}
+        collapsedWidth={SIDER_COLLAPSED_PX}
         theme="dark"
         trigger={null}
       >
         <div
           className={`admin-sider-brand${collapsed ? ' admin-sider-brand--collapsed' : ''}`}
         >
-          <div className="admin-sider-logo-mark">
-            <PayslipSidebarLogoMark />
-          </div>
-          {!collapsed ? (
-            <span className="admin-sider-logo-text">PaySlip Manager</span>
-          ) : null}
+          <img
+            src="/logo-stacked-sider.svg"
+            alt="PaySlip Manager"
+            className="admin-sider-logo-stacked"
+            width={180}
+            height={155}
+            decoding="async"
+          />
         </div>
         <div className="admin-sider-menu-column">
+          <div className="admin-sider-nav-label">Navigation</div>
           <Menu
             className="admin-sider-menu admin-sider-menu-top"
             theme="dark"
@@ -317,7 +309,10 @@ export function AdminLayout() {
           {collapsed ? '»' : '«'}
         </button>
       </Sider>
-      <Layout>
+      <Layout
+        className="admin-layout-main"
+        style={{ marginLeft: collapsed ? SIDER_COLLAPSED_PX : SIDER_EXPANDED_PX }}
+      >
         <Header className="admin-layout-header">
           <div className="admin-layout-header-left">
             {headerBreadcrumbItems.length > 0 ? (
@@ -356,7 +351,7 @@ export function AdminLayout() {
                   style={{
                     backgroundColor: adminTheme.teal,
                     color: adminTheme.white,
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: 600,
                   }}
                 >
@@ -366,8 +361,8 @@ export function AdminLayout() {
             </Dropdown>
           </Space>
         </Header>
-        <Content className="admin-content">
-          <Outlet />
+        <Content className="admin-content admin-content--animated">
+          <AnimatedMainOutlet />
         </Content>
       </Layout>
     </Layout>

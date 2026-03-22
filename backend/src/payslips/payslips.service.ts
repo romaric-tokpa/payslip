@@ -13,6 +13,7 @@ import { frenchMonthName } from '../notifications/notifications.constants';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { isUserOperational } from '../users/user-lifecycle.util';
 import { UsersService } from '../users/users.service';
 import {
   PAYSLIP_AUDIT,
@@ -109,6 +110,7 @@ export type BulkAnalyzeRow = {
     periodYear?: number;
     matchMethod: 'matricule' | 'name' | 'filename' | 'unmatched';
     confidence: number;
+    lifecycleWarning?: string;
   };
   status: 'auto_matched' | 'needs_review' | 'unmatched';
   duplicate: boolean;
@@ -215,6 +217,25 @@ export class PayslipsService {
       throw new ForbiddenException(
         'Utilisateur introuvable ou hors de votre entreprise',
       );
+    }
+
+    if (target.role === 'EMPLOYEE') {
+      if (!isUserOperational(target) || !target.isActive) {
+        if (
+          target.employmentStatus === 'DEPARTED' ||
+          target.employmentStatus === 'ARCHIVED'
+        ) {
+          const d = target.departureDate
+            ? target.departureDate.toLocaleDateString('fr-FR')
+            : '—';
+          throw new BadRequestException(
+            `Ce collaborateur est sorti de l'entreprise depuis le ${d}. Le bulletin ne sera pas distribué.`,
+          );
+        }
+        throw new BadRequestException(
+          'Ce collaborateur ne peut pas recevoir de bulletin dans son état actuel.',
+        );
+      }
     }
 
     const existing = await this.prisma.payslip.findFirst({
@@ -424,6 +445,7 @@ export class PayslipsService {
           periodYear: match.periodYear,
           matchMethod: match.matchMethod,
           confidence: match.confidence,
+          lifecycleWarning: match.lifecycleWarning,
         },
         status,
       });

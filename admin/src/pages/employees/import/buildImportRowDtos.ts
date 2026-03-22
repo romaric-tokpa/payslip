@@ -124,6 +124,9 @@ export function buildImportRowDtos(
       serviceName: serviceName || undefined,
       directionId,
       directionName: directionName || undefined,
+      contractType: c.contractType.trim() || undefined,
+      contractEndDate: c.contractEndDate.trim() || undefined,
+      entryDate: c.entryDate.trim() || undefined,
     }
   })
 }

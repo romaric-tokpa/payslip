@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -61,4 +62,49 @@ export class QueryUsersDto {
   @IsOptional()
   @IsIn(['all', 'active', 'inactive', 'pending_password'])
   activationStatus?: 'all' | 'active' | 'inactive' | 'pending_password';
+
+  @ApiPropertyOptional({
+    enum: [
+      'all',
+      'active',
+      'on_notice',
+      'departed',
+      'pending',
+      'archived',
+    ],
+    description:
+      'Filtre cycle de vie : actifs (ACTIVE+ON_NOTICE), préavis, sortis, attente activation, archivés',
+  })
+  @IsOptional()
+  @IsIn([
+    'all',
+    'active',
+    'on_notice',
+    'departed',
+    'pending',
+    'archived',
+  ])
+  employmentFilter?:
+    | 'all'
+    | 'active'
+    | 'on_notice'
+    | 'departed'
+    | 'pending'
+    | 'archived';
+
+  @ApiPropertyOptional({
+    enum: ['all', 'CDI', 'CDD', 'INTERIM', 'STAGE'],
+  })
+  @IsOptional()
+  @IsIn(['all', 'CDI', 'CDD', 'INTERIM', 'STAGE'])
+  contractType?: 'all' | 'CDI' | 'CDD' | 'INTERIM' | 'STAGE';
+
+  @ApiPropertyOptional({
+    description:
+      'Si true : CDD / intérim / stage dont la fin de contrat est dans les 30 prochains jours',
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  expiringContracts30d?: boolean;
 }

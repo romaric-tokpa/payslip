@@ -25,7 +25,6 @@ import * as authApi from '../../services/auth.service'
 import * as employeesApi from '../../services/employees.service'
 import * as orgApi from '../../services/organization.service'
 import * as settingsApi from '../../services/settings.service'
-import { adminTheme } from '../../theme/adminTheme'
 import type { EmployeeUser } from '../../types/employees'
 import type {
   OrgDepartment,
@@ -34,6 +33,7 @@ import type {
 } from '../../types/organization'
 import type { MeSettingsResponse } from '../../types/settings'
 import { getApiErrorMessage } from '../../utils/apiErrorMessage'
+import '../employees/employees.css'
 import './settings.css'
 
 type OrgKind = 'directions' | 'departments' | 'services'
@@ -546,18 +546,17 @@ export function SettingsPage() {
   }, [canManageOrg, me?.user.companyId])
 
   return (
-    <div>
+    <div className="settings-page">
+      <p className="settings-page-lead">
+        Données d’entreprise, profil, structure libre (directions / départements /
+        services) et préférences de sécurité — tout au même endroit.
+      </p>
+
       <div className="settings-page-grid">
         {/* Entreprise */}
         <div className="settings-card">
           <div className="settings-card-head">
-            <div
-              className="settings-card-icon"
-              style={{
-                background: adminTheme.tealBg,
-                color: adminTheme.teal,
-              }}
-            >
+            <div className="settings-card-icon settings-card-icon--teal">
               <HomeOutlined />
             </div>
             <h2 className="settings-card-title">Entreprise</h2>
@@ -599,10 +598,7 @@ export function SettingsPage() {
               type="primary"
               disabled={!canEditCompany}
               onClick={() => setCompanyModalOpen(true)}
-              style={{
-                background: adminTheme.teal,
-                borderColor: adminTheme.teal,
-              }}
+              className="employees-btn-primary-teal"
             >
               Modifier
             </Button>
@@ -612,13 +608,7 @@ export function SettingsPage() {
         {/* Mon compte */}
         <div className="settings-card">
           <div className="settings-card-head">
-            <div
-              className="settings-card-icon"
-              style={{
-                background: adminTheme.orangeBg,
-                color: adminTheme.orange,
-              }}
-            >
+            <div className="settings-card-icon settings-card-icon--orange">
               <UserOutlined />
             </div>
             <h2 className="settings-card-title">Mon compte</h2>
@@ -641,17 +631,7 @@ export function SettingsPage() {
                 <div>
                   <div className="settings-field-label">Rôle</div>
                   <div>
-                    <Tag
-                      style={{
-                        margin: 0,
-                        background: adminTheme.tealBg,
-                        color: adminTheme.teal,
-                        border: 'none',
-                        fontSize: 11,
-                      }}
-                    >
-                      {roleBadge}
-                    </Tag>
+                    <Tag className="settings-role-tag">{roleBadge}</Tag>
                   </div>
                 </div>
               </>
@@ -666,10 +646,7 @@ export function SettingsPage() {
               type="primary"
               disabled={!displayUser}
               onClick={() => setProfileModalOpen(true)}
-              style={{
-                background: adminTheme.teal,
-                borderColor: adminTheme.teal,
-              }}
+              className="employees-btn-primary-teal"
             >
               Modifier
             </Button>
@@ -685,18 +662,12 @@ export function SettingsPage() {
         {/* Organisation */}
         <div className="settings-card">
           <div className="settings-card-head">
-            <div
-              className="settings-card-icon"
-              style={{
-                background: adminTheme.blueBg,
-                color: adminTheme.blue,
-              }}
-            >
+            <div className="settings-card-icon settings-card-icon--blue">
               <FolderOutlined />
             </div>
             <h2 className="settings-card-title">Organisation</h2>
           </div>
-          <div className="settings-card-body" style={{ paddingTop: 4 }}>
+          <div className="settings-card-body settings-card-body--org">
             <div
               role="button"
               tabIndex={0}
@@ -709,20 +680,12 @@ export function SettingsPage() {
                 }
               }}
             >
-              <span style={{ fontSize: 13, color: adminTheme.dark }}>
-                Départements
-              </span>
+              <span className="settings-org-row__label">Départements</span>
               <Space size={6}>
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: adminTheme.orange,
-                  }}
-                >
+                <span className="settings-org-row__count">
                   {orgCounts.departments}
                 </span>
-                <RightOutlined style={{ color: adminTheme.grayLight }} />
+                <RightOutlined className="settings-org-row__chevron" />
               </Space>
             </div>
             <div
@@ -737,20 +700,12 @@ export function SettingsPage() {
                 }
               }}
             >
-              <span style={{ fontSize: 13, color: adminTheme.dark }}>
-                Services
-              </span>
+              <span className="settings-org-row__label">Services</span>
               <Space size={6}>
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: adminTheme.orange,
-                  }}
-                >
+                <span className="settings-org-row__count">
                   {orgCounts.services}
                 </span>
-                <RightOutlined style={{ color: adminTheme.grayLight }} />
+                <RightOutlined className="settings-org-row__chevron" />
               </Space>
             </div>
             <div
@@ -765,20 +720,12 @@ export function SettingsPage() {
                 }
               }}
             >
-              <span style={{ fontSize: 13, color: adminTheme.dark }}>
-                Directions
-              </span>
+              <span className="settings-org-row__label">Directions</span>
               <Space size={6}>
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: adminTheme.orange,
-                  }}
-                >
+                <span className="settings-org-row__count">
                   {orgCounts.directions}
                 </span>
-                <RightOutlined style={{ color: adminTheme.grayLight }} />
+                <RightOutlined className="settings-org-row__chevron" />
               </Space>
             </div>
           </div>
@@ -787,58 +734,28 @@ export function SettingsPage() {
         {/* Sécurité */}
         <div className="settings-card">
           <div className="settings-card-head">
-            <div
-              className="settings-card-icon"
-              style={{
-                background: adminTheme.greenBg,
-                color: adminTheme.green,
-              }}
-            >
+            <div className="settings-card-icon settings-card-icon--green">
               <SafetyOutlined />
             </div>
             <h2 className="settings-card-title">Sécurité</h2>
           </div>
           <div className="settings-card-body">
             <div className="settings-sec-row">
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                }}
-              >
+              <div className="settings-sec-row__inner">
                 <div>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: adminTheme.dark,
-                    }}
-                  >
+                  <div className="settings-sec-row__title">
                     Authentification 2FA
                   </div>
-                  <div
-                    style={{
-                      fontSize: 9,
-                      color: adminTheme.grayLight,
-                      marginTop: 2,
-                    }}
-                  >
+                  <div className="settings-sec-row__hint">
                     Double facteur à brancher sur un fournisseur (TOTP / SMS).
                   </div>
                 </div>
                 <Switch
                   checked={twoFaEnabled}
+                  className="settings-switch settings-switch--2fa"
                   onChange={(v) => {
-                    console.log('2FA toggled', v)
                     setTwoFaEnabled(v)
                   }}
-                  style={
-                    twoFaEnabled
-                      ? { background: adminTheme.green }
-                      : undefined
-                  }
                 />
               </div>
             </div>
@@ -846,13 +763,7 @@ export function SettingsPage() {
               <div
                 role="button"
                 tabIndex={0}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  cursor: 'pointer',
-                }}
+                className="settings-sec-row__inner settings-sec-row__inner--clickable"
                 onClick={() => {
                   void loadSessions()
                   setSessionsModalOpen(true)
@@ -866,72 +777,33 @@ export function SettingsPage() {
                 }}
               >
                 <div>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: adminTheme.dark,
-                    }}
-                  >
-                    Sessions actives
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 9,
-                      color: adminTheme.grayLight,
-                      marginTop: 2,
-                    }}
-                  >
+                  <div className="settings-sec-row__title">Sessions actives</div>
+                  <div className="settings-sec-row__hint">
                     Appareils avec un jeton de rafraîchissement valide.
                   </div>
                 </div>
                 <Space size={6}>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: adminTheme.orange,
-                    }}
-                  >
+                  <span className="settings-sec-row__badge">
                     {sessionsLoading ? '…' : sessions.length}
                   </span>
-                  <RightOutlined style={{ color: adminTheme.grayLight }} />
+                  <RightOutlined className="settings-org-row__chevron" />
                 </Space>
               </div>
             </div>
             <div className="settings-sec-row">
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                }}
-              >
+              <div className="settings-sec-row__inner">
                 <div>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: adminTheme.dark,
-                    }}
-                  >
+                  <div className="settings-sec-row__title">
                     Notifications e-mail
                   </div>
-                  <div
-                    style={{
-                      fontSize: 9,
-                      color: adminTheme.grayLight,
-                      marginTop: 2,
-                    }}
-                  >
+                  <div className="settings-sec-row__hint">
                     Alertes produit et rappels (configuration à venir).
                   </div>
                 </div>
                 <Switch
                   checked={emailNotifEnabled}
+                  className="settings-switch settings-switch--email"
                   onChange={(v) => {
-                    console.log('Email notifications toggled', v)
                     setEmailNotifEnabled(v)
                   }}
                 />
@@ -947,7 +819,7 @@ export function SettingsPage() {
       </div>
 
       <p className="settings-footer">
-        PaySlip Manager v1.0.0 — Propulsé par Yemma Solutions
+        PaySlip Manager v1.0.0
       </p>
 
       <Modal
@@ -977,10 +849,7 @@ export function SettingsPage() {
               type="primary"
               loading={savingCompany}
               onClick={() => void onSaveCompany()}
-              style={{
-                background: adminTheme.teal,
-                borderColor: adminTheme.teal,
-              }}
+              className="employees-btn-primary-teal"
             >
               Enregistrer
             </Button>
@@ -1026,10 +895,7 @@ export function SettingsPage() {
               type="primary"
               loading={savingProfile}
               onClick={() => void onSaveProfile()}
-              style={{
-                background: adminTheme.teal,
-                borderColor: adminTheme.teal,
-              }}
+              className="employees-btn-primary-teal"
             >
               Enregistrer
             </Button>
@@ -1090,10 +956,7 @@ export function SettingsPage() {
               type="primary"
               loading={changingPassword}
               onClick={() => void onChangePassword()}
-              style={{
-                background: adminTheme.teal,
-                borderColor: adminTheme.teal,
-              }}
+              className="employees-btn-primary-teal"
             >
               Mettre à jour
             </Button>
@@ -1162,14 +1025,11 @@ export function SettingsPage() {
         width={720}
         destroyOnHidden
       >
-        <div style={{ marginBottom: 12 }}>
+        <div className="settings-modal-toolbar">
           <Button
             type="primary"
             onClick={openOrgCreate}
-            style={{
-              background: adminTheme.teal,
-              borderColor: adminTheme.teal,
-            }}
+            className="employees-btn-primary-teal"
           >
             Ajouter
           </Button>
@@ -1237,10 +1097,7 @@ export function SettingsPage() {
               type="primary"
               loading={orgSaving}
               onClick={() => void submitOrgEntity()}
-              style={{
-                background: adminTheme.teal,
-                borderColor: adminTheme.teal,
-              }}
+              className="employees-btn-primary-teal"
             >
               Enregistrer
             </Button>

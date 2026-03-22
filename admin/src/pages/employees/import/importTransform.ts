@@ -53,6 +53,9 @@ export type CanonicalImportRow = {
   departement: string
   service: string
   poste: string
+  contractType: string
+  contractEndDate: string
+  entryDate: string
 }
 
 export function rowToCanonical(
@@ -77,6 +80,9 @@ export function rowToCanonical(
     departement: getMappedCell(row, mappings.departement ?? ''),
     service: getMappedCell(row, mappings.service ?? ''),
     poste: getMappedCell(row, mappings.poste ?? ''),
+    contractType: getMappedCell(row, mappings.contractType ?? ''),
+    contractEndDate: getMappedCell(row, mappings.contractEndDate ?? ''),
+    entryDate: getMappedCell(row, mappings.entryDate ?? ''),
   }
 }
 

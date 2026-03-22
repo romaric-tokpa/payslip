@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="310" viewBox="0 0 180 155">
+  <circle cx="90" cy="55" r="48" fill="#1A7A7D"/>
+  <circle cx="90" cy="55" r="40" fill="none" stroke="white" stroke-width="0.7" opacity="0.25"/>
+  <text x="76" y="74" font-family="system-ui, -apple-system, sans-serif" font-size="56" font-weight="700" fill="white">P</text>
+  <rect x="100" y="36" width="5" height="30" rx="2.5" fill="#F28C28"/>
+  <circle cx="102.5" cy="30" r="3.8" fill="#F28C28"/>
+  <text x="90" y="126" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="21" font-weight="700" fill="#FFFFFF">PaySlip</text>
+  <text x="90" y="145" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="400" fill="#F28C28" letter-spacing="4.5">MANAGER</text>
+</svg>

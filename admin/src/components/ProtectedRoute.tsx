@@ -2,6 +2,8 @@ import { Spin } from 'antd'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
+const PUBLIC_HOME_PATHS = new Set(['/', '/landing'])
+
 export function ProtectedRoute() {
   const { isLoading, isAuthenticated } = useAuth()
   const location = useLocation()
@@ -22,13 +24,12 @@ export function ProtectedRoute() {
   }
 
   if (!isAuthenticated) {
-    return (
-      <Navigate
-        to="/login"
-        replace
-        state={{ from: `${location.pathname}${location.search}` }}
-      />
-    )
+    const returnPath = `${location.pathname}${location.search}`
+    const qs =
+      returnPath && !PUBLIC_HOME_PATHS.has(location.pathname)
+        ? `?returnUrl=${encodeURIComponent(returnPath)}`
+        : ''
+    return <Navigate to={`/login${qs}`} replace />
   }
 
   return <Outlet />

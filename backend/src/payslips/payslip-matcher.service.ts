@@ -52,13 +52,43 @@ function displayName(u: PayslipMatchEmployeeRow): string {
 export class PayslipMatcherService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async departedWarningForMatricule(
+    companyId: string,
+    matricule: string,
+  ): Promise<string | undefined> {
+    const u = await this.prisma.user.findFirst({
+      where: {
+        companyId,
+        role: UserRole.EMPLOYEE,
+        employeeId: { equals: matricule.trim(), mode: 'insensitive' },
+        employmentStatus: { in: ['DEPARTED', 'ARCHIVED'] },
+      },
+      select: { departureDate: true },
+    });
+    if (!u) {
+      return undefined;
+    }
+    const d = u.departureDate
+      ? u.departureDate.toLocaleDateString('fr-FR')
+      : '—';
+    return (
+      `Ce collaborateur est sorti de l'entreprise depuis le ${d}. ` +
+      'Le bulletin ne sera pas distribué.'
+    );
+  }
+
   async matchPayslipToEmployee(
     extracted: ExtractedPayslipInfo,
     filename: string,
     companyId: string,
   ): Promise<PayslipMatchResult> {
     const employees = await this.prisma.user.findMany({
-      where: { companyId, role: UserRole.EMPLOYEE },
+      where: {
+        companyId,
+        role: UserRole.EMPLOYEE,
+        employmentStatus: { in: ['ACTIVE', 'ON_NOTICE'] },
+        isActive: true,
+      },
       select: {
         id: true,
         firstName: true,
@@ -103,6 +133,19 @@ export class PayslipMatcherService {
           periodYear,
           matchMethod: 'matricule',
           confidence: Math.min(100, extracted.confidence + 25),
+        };
+      }
+      const departedWarn = await this.departedWarningForMatricule(
+        companyId,
+        mat,
+      );
+      if (departedWarn) {
+        return {
+          periodMonth,
+          periodYear,
+          matchMethod: 'unmatched',
+          confidence: extracted.confidence,
+          lifecycleWarning: departedWarn,
         };
       }
     }
@@ -166,6 +209,19 @@ export class PayslipMatcherService {
             periodYear: year,
             matchMethod: 'filename',
             confidence: Math.min(100, extracted.confidence + 10),
+          };
+        }
+        const departedWarn = await this.departedWarningForMatricule(
+          companyId,
+          matricule,
+        );
+        if (departedWarn) {
+          return {
+            periodMonth: month,
+            periodYear: year,
+            matchMethod: 'unmatched',
+            confidence: extracted.confidence,
+            lifecycleWarning: departedWarn,
           };
         }
       }

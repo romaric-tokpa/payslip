@@ -37,6 +37,21 @@ const ROWS: RowDef[] = [
   },
   { id: 'poste', label: 'Poste', requiredUnlessFullName: false },
   {
+    id: 'contractType',
+    label: 'Type de contrat',
+    requiredUnlessFullName: false,
+  },
+  {
+    id: 'contractEndDate',
+    label: 'Date fin de contrat',
+    requiredUnlessFullName: false,
+  },
+  {
+    id: 'entryDate',
+    label: "Date d'entrée",
+    requiredUnlessFullName: false,
+  },
+  {
     id: 'nomComplet',
     label: 'Nom complet',
     requiredUnlessFullName: false,

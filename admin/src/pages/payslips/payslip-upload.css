@@ -1,75 +1,167 @@
-/* Boutons teal (alignés admin) */
-.payslip-btn-teal.ant-btn-primary {
-  background: #0f5c5e !important;
-  border-color: #0f5c5e !important;
+/* —— Page —— */
+.payslip-upload-page {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 2px 40px;
 }
 
-.payslip-btn-teal.ant-btn-primary:not(:disabled):hover {
-  background: #1a7a7d !important;
-  border-color: #1a7a7d !important;
+.payslip-upload-lead {
+  margin: 0 0 22px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #5a6c7d;
+  font-weight: 500;
+  max-width: 640px;
 }
 
-/* Stepper bulk (même principe que import collaborateurs) */
+/* —— Onglets —— */
+.payslip-upload-tabs.ant-tabs .ant-tabs-nav {
+  margin-bottom: 22px;
+}
+
+.payslip-upload-tabs.ant-tabs .ant-tabs-nav::before {
+  border-bottom: none;
+}
+
+.payslip-upload-tabs .ant-tabs-nav-wrap {
+  padding: 5px;
+  background: rgba(28, 40, 51, 0.04);
+  border: 1px solid rgba(28, 40, 51, 0.07);
+  border-radius: 14px;
+}
+
+.payslip-upload-tabs .ant-tabs-nav-list {
+  width: 100%;
+  display: flex !important;
+  gap: 6px;
+}
+
+.payslip-upload-tabs .ant-tabs-tab {
+  flex: 1;
+  justify-content: center;
+  margin: 0 !important;
+  padding: 12px 16px !important;
+  border-radius: 10px !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  font-weight: 600;
+  font-size: 14px;
+  color: #5a6c7d !important;
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    color 0.2s ease;
+}
+
+.payslip-upload-tabs .ant-tabs-tab:hover {
+  color: #0f5c5e !important;
+  background: rgba(255, 255, 255, 0.65) !important;
+}
+
+.payslip-upload-tabs .ant-tabs-tab-active {
+  background: #ffffff !important;
+  border-color: rgba(28, 40, 51, 0.08) !important;
+  box-shadow: 0 4px 14px rgba(28, 40, 51, 0.08);
+  color: #0f5c5e !important;
+}
+
+.payslip-upload-tabs .ant-tabs-tab-active .payslip-upload-tab-label {
+  color: #0f5c5e;
+}
+
+.payslip-upload-tabs .ant-tabs-ink-bar {
+  display: none;
+}
+
+.payslip-upload-tab-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+}
+
+/* —— Flux bulk —— */
+.payslip-bulk-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+}
+
+/* Stepper */
+.bulk-payslip-stepper-wrap {
+  padding: 4px;
+  background: rgba(28, 40, 51, 0.03);
+  border: 1px solid rgba(28, 40, 51, 0.07);
+  border-radius: 14px;
+}
+
 .bulk-payslip-stepper {
   display: flex;
   flex-direction: row;
   width: 100%;
-  margin-bottom: 20px;
+  gap: 8px;
   overflow: hidden;
 }
 
 .bulk-payslip-stepper__segment {
   flex: 1;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 12px 14px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 10px;
+  transition:
+    background 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
-.bulk-payslip-stepper__segment--first {
-  border-radius: 6px 0 0 6px;
-}
-
+.bulk-payslip-stepper__segment--first,
 .bulk-payslip-stepper__segment--last {
-  border-radius: 0 6px 6px 0;
+  border-radius: 10px;
 }
 
 .bulk-payslip-stepper__segment--active {
-  background: #0f5c5e;
+  background: linear-gradient(145deg, #0f5c5e 0%, #0a4a4c 100%);
+  box-shadow: 0 6px 18px rgba(15, 92, 94, 0.35);
 }
 
 .bulk-payslip-stepper__segment--done {
-  background: #e8f5f5;
+  background: linear-gradient(180deg, #e8f5f5 0%, #dff0f0 100%);
+  border: 1px solid rgba(15, 92, 94, 0.15);
 }
 
 .bulk-payslip-stepper__segment--future {
-  background: #f4f6f6;
+  background: #f8fafb;
+  border: 1px solid rgba(28, 40, 51, 0.06);
 }
 
 .bulk-payslip-stepper__inner {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
 .bulk-payslip-stepper__circle {
   position: relative;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   line-height: 1;
 }
 
 .bulk-payslip-stepper__segment--active .bulk-payslip-stepper__circle {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.22);
   color: #ffffff;
 }
 
@@ -78,21 +170,22 @@
 }
 
 .bulk-payslip-stepper__check {
-  font-size: 11px;
+  font-size: 12px;
   color: #27ae60 !important;
 }
 
 .bulk-payslip-stepper__segment--future .bulk-payslip-stepper__circle {
   background: #ffffff;
-  color: #bdc3c7;
+  color: #95a5a6;
 }
 
 .bulk-payslip-stepper__label {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.02em;
 }
 
 .bulk-payslip-stepper__segment--active .bulk-payslip-stepper__label {
@@ -104,20 +197,67 @@
 }
 
 .bulk-payslip-stepper__segment--future .bulk-payslip-stepper__label {
-  color: #bdc3c7;
+  color: #95a5a6;
 }
 
-/* Single upload */
-.payslip-single-card.ant-card {
+/* Boutons teal */
+.payslip-btn-teal.ant-btn-primary {
+  background: #0f5c5e !important;
+  border-color: #0f5c5e !important;
   border-radius: 10px !important;
-  border: 0.5px solid #e8e8e8 !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 14px rgba(15, 92, 94, 0.25);
+}
+
+.payslip-btn-teal.ant-btn-primary:not(:disabled):hover {
+  background: #1a7a7d !important;
+  border-color: #1a7a7d !important;
+}
+
+/* Formulaire upload simple */
+.payslip-single-form {
+  width: 100%;
+}
+
+.payslip-single-submit-wrap {
+  margin-bottom: 0 !important;
+  margin-top: 12px !important;
+}
+
+.payslip-form-item .ant-form-item-label > label {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: #5a6c7d !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.07em !important;
+}
+
+.payslip-upload-select .ant-select-selector {
+  border-radius: 10px !important;
+  border: 1px solid rgba(28, 40, 51, 0.1) !important;
+  min-height: 42px !important;
+  font-size: 15px !important;
   box-shadow: none !important;
+}
+
+.payslip-upload-select.ant-select-focused .ant-select-selector {
+  border-color: #0f5c5e !important;
+  box-shadow: 0 0 0 3px rgba(15, 92, 94, 0.12) !important;
+}
+
+.payslip-single-card.ant-card {
+  border-radius: 16px !important;
+  border: 1px solid rgba(28, 40, 51, 0.08) !important;
+  box-shadow:
+    0 4px 22px rgba(28, 40, 51, 0.06),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset !important;
+  background: linear-gradient(165deg, #ffffff 0%, #fafcfd 100%) !important;
 }
 
 .payslip-single-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 24px;
   align-items: start;
 }
 
@@ -127,14 +267,6 @@
   }
 }
 
-.payslip-form-item .ant-form-item-label > label {
-  font-size: 9px !important;
-  font-weight: 600 !important;
-  color: #7f8c8d !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.04em !important;
-}
-
 .payslip-single-drop .ant-upload.ant-upload-drag {
   background: transparent !important;
   border: none !important;
@@ -142,39 +274,49 @@
 }
 
 .payslip-single-drop-inner {
-  border: 2px dashed #bdc3c7;
-  border-radius: 12px;
-  padding: 28px 20px;
+  border: 2px dashed rgba(28, 40, 51, 0.14);
+  border-radius: 16px;
+  padding: 32px 22px;
   text-align: center;
-  background: #ffffff;
+  background: linear-gradient(180deg, #fafcfd 0%, #ffffff 100%);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
 }
 
 .payslip-single-drop-inner:hover {
   border-color: #0f5c5e;
+  box-shadow: 0 8px 28px rgba(15, 92, 94, 0.1);
 }
 
 .payslip-single-pdf-icon {
-  font-size: 36px;
+  font-size: 42px;
   color: #e74c3c;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 2px 6px rgba(231, 76, 60, 0.25));
 }
 
 .payslip-single-drop-title {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 700;
   color: #1c2833;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
 }
 
 .payslip-single-drop-sub {
-  font-size: 11px;
+  font-size: 12px;
   color: #7f8c8d;
+  font-weight: 500;
 }
 
-/* Bulk analysis drop */
+/* Bulk analysis */
 .bulk-analysis-card.ant-card {
-  border-radius: 10px !important;
-  border: 0.5px solid #e8e8e8 !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(28, 40, 51, 0.08) !important;
+  box-shadow: 0 4px 22px rgba(28, 40, 51, 0.06) !important;
+  background: linear-gradient(165deg, #ffffff 0%, #fafcfd 100%) !important;
 }
 
 .bulk-analysis-drop .ant-upload.ant-upload-drag {
@@ -184,43 +326,68 @@
 }
 
 .bulk-analysis-drop-inner {
-  border: 2px dashed #bdc3c7;
-  border-radius: 12px;
-  padding: 32px;
+  border: 2px dashed rgba(28, 40, 51, 0.14);
+  border-radius: 16px;
+  padding: 36px 24px;
   text-align: center;
-  background: #ffffff;
+  background: linear-gradient(180deg, #fafcfd 0%, #ffffff 100%);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.bulk-analysis-drop-inner:hover {
+  border-color: rgba(15, 92, 94, 0.45);
+  box-shadow: 0 8px 28px rgba(15, 92, 94, 0.08);
 }
 
 .bulk-analysis-icon-wrap {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: #e8f5f5;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: linear-gradient(145deg, #e8f5f5 0%, #d4ecec 100%);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 16px;
+  margin: 0 auto 18px;
   color: #0f5c5e;
-  font-size: 24px;
+  font-size: 26px;
+  border: 1px solid rgba(15, 92, 94, 0.12);
 }
 
 .bulk-analysis-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: #1c2833;
-  margin-bottom: 8px;
+  margin: 0 !important;
+  font-size: 17px !important;
+  font-weight: 800 !important;
+  color: #1c2833 !important;
+  letter-spacing: -0.03em !important;
 }
 
 .bulk-analysis-sub {
-  font-size: 11px;
-  color: #7f8c8d;
-  max-width: 420px;
-  margin: 0 auto 8px;
+  font-size: 14px;
+  color: #5a6c7d;
+  margin-bottom: 10px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .bulk-analysis-hint {
-  font-size: 11px;
-  color: #bdc3c7;
+  font-size: 12px;
+  color: #95a5a6;
+  line-height: 1.45;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.payslip-bulk-errors {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.payslip-bulk-error-alert {
+  border-radius: 12px !important;
 }
 
 .bulk-analysis-progress-wrap {
@@ -231,13 +398,88 @@
   margin-right: auto;
 }
 
+.payslip-bulk-progress {
+  margin-top: 22px !important;
+}
+
+.payslip-bulk-progress .ant-progress-bg {
+  border-radius: 6px !important;
+}
+
+/* Résultat distribution */
+.payslip-result-stat-card.ant-card {
+  border-radius: 14px !important;
+  text-align: center;
+  border-width: 1px !important;
+  box-shadow: 0 2px 12px rgba(28, 40, 51, 0.05);
+}
+
+.payslip-result-stat-card--success.ant-card {
+  background: linear-gradient(180deg, #f2fcf7 0%, #eafaf1 100%) !important;
+  border-color: rgba(39, 174, 96, 0.25) !important;
+}
+
+.payslip-result-stat-card--failed.ant-card {
+  background: linear-gradient(180deg, #fffbfb 0%, #fdedec 100%) !important;
+  border-color: rgba(231, 76, 60, 0.28) !important;
+}
+
+.payslip-result-stat-card--ignored.ant-card {
+  background: linear-gradient(180deg, #fafbfc 0%, #f4f6f6 100%) !important;
+  border-color: rgba(28, 40, 51, 0.1) !important;
+}
+
+.payslip-result-stat-card__label {
+  display: block;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.payslip-result-stat-card--success .payslip-result-stat-card__label {
+  color: #27ae60 !important;
+}
+
+.payslip-result-stat-card--failed .payslip-result-stat-card__label {
+  color: #e74c3c !important;
+}
+
+.payslip-result-stat-card--ignored .payslip-result-stat-card__label {
+  color: #7f8c8d !important;
+}
+
+.payslip-result-stat-card__value {
+  margin-top: 6px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.payslip-result-stat-card--success .payslip-result-stat-card__value {
+  color: #27ae60;
+}
+
+.payslip-result-stat-card--failed .payslip-result-stat-card__value {
+  color: #e74c3c;
+}
+
+.payslip-result-stat-card--ignored .payslip-result-stat-card__value {
+  color: #7f8c8d;
+}
+
+.payslip-result-subline {
+  font-size: 13px !important;
+}
+
 /* Bulk review */
 .bulk-review-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 14px;
+  margin-bottom: 14px;
 }
 
 .bulk-review-chips {
@@ -254,7 +496,7 @@
   border-radius: 10px !important;
   border: none !important;
   font-size: 12px !important;
-  font-weight: 500 !important;
+  font-weight: 600 !important;
   line-height: 1.35 !important;
 }
 
@@ -285,7 +527,7 @@
 
 .bulk-review-chip strong {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 800;
   margin-right: 4px;
 }
 
@@ -293,30 +535,32 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: #f4f6f6;
-  border-radius: 10px;
-  border: 0.5px solid #e8e8e8;
+  gap: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, #f8fafb 0%, #f4f6f6 100%);
+  border-radius: 12px;
+  border: 1px solid rgba(28, 40, 51, 0.08);
 }
 
 .bulk-review-global__label {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: #1c2833;
   white-space: nowrap;
 }
 
 .bulk-review-global .ant-select-selector {
-  border-radius: 8px !important;
+  border-radius: 10px !important;
   background: #ffffff !important;
-  border: 0.5px solid #e0e0e0 !important;
+  border: 1px solid rgba(28, 40, 51, 0.1) !important;
 }
 
 .bulk-review-table-card.ant-card {
-  border-radius: 10px !important;
-  border: 0.5px solid #e8e8e8 !important;
-  margin-top: 12px;
+  border-radius: 16px !important;
+  border: 1px solid rgba(28, 40, 51, 0.08) !important;
+  margin-top: 14px;
+  box-shadow: 0 4px 18px rgba(28, 40, 51, 0.05) !important;
+  overflow: hidden;
 }
 
 .bulk-review-table-card .ant-card-body {
@@ -324,13 +568,22 @@
 }
 
 .bulk-review-table .ant-table {
-  font-size: 11px;
+  font-size: 12px;
+}
+
+.bulk-review-table .ant-table-thead > tr > th {
+  background: #f4f7f8 !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #5a6c7d !important;
 }
 
 .bulk-review-filename {
-  font-size: 10px;
+  font-size: 11px;
   color: #2c3e50;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .bulk-review-row-review td {
@@ -349,13 +602,13 @@
 
 .bulk-review-auto-badge {
   margin: 0 !important;
-  font-size: 8px !important;
-  padding: 2px 6px !important;
+  font-size: 9px !important;
+  padding: 2px 7px !important;
   border-radius: 6px !important;
   background: #e8f5f5 !important;
   color: #0f5c5e !important;
   border: none !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
 }
 
 .bulk-review-select-warning .ant-select-selector {
@@ -373,51 +626,51 @@
 }
 
 .bulk-review-conf-bar .ant-progress-inner {
-  border-radius: 2px !important;
+  border-radius: 3px !important;
 }
 
 .bulk-review-status-ready {
   margin: 0 !important;
-  font-size: 9px !important;
-  padding: 2px 8px !important;
+  font-size: 10px !important;
+  padding: 3px 8px !important;
   border-radius: 6px !important;
   background: #eafaf1 !important;
   color: #27ae60 !important;
   border: none !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
 }
 
 .bulk-review-status-review {
   margin: 0 !important;
-  font-size: 9px !important;
-  padding: 2px 8px !important;
+  font-size: 10px !important;
+  padding: 3px 8px !important;
   border-radius: 6px !important;
   background: #fef3e5 !important;
   color: #f28c28 !important;
   border: none !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
 }
 
 .bulk-review-status-err {
   margin: 0 !important;
-  font-size: 9px !important;
-  padding: 2px 8px !important;
+  font-size: 10px !important;
+  padding: 3px 8px !important;
   border-radius: 6px !important;
   background: #fdedec !important;
   color: #e74c3c !important;
   border: none !important;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
 }
 
 .bulk-review-status-dup {
   margin: 0 !important;
-  font-size: 9px !important;
-  padding: 2px 8px !important;
+  font-size: 10px !important;
+  padding: 3px 8px !important;
   border-radius: 6px !important;
   background: #f4f6f6 !important;
   color: #7f8c8d !important;
   border: none !important;
-  font-weight: 500 !important;
+  font-weight: 600 !important;
 }
 
 .bulk-review-footer {
@@ -425,8 +678,8 @@
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 16px;
+  gap: 14px;
+  margin-top: 18px;
 }
 
 .bulk-review-footer__right {

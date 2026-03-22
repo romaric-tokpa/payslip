@@ -6,3 +6,4 @@ export * from './update-user.dto';
 export * from './user-import-config.dto';
 export * from './import-validate.dto';
 export * from './bulk-activate.dto';
+export * from './departure.dto';

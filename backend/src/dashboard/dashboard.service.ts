@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import type { RequestUser } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
+import { DepartureService } from '../users/departure.service';
 
 export type MonthlyUploadStat = {
   month: number;
@@ -18,6 +19,16 @@ export type TopUnreadRow = {
   isRead: boolean;
 };
 
+export type ExpiringContractDashboardRow = {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  employeeId: string | null;
+  departmentLabel: string | null;
+  contractEndDate: string;
+  daysRemaining: number;
+};
+
 export type DashboardStats = {
   totalEmployees: number;
   activeEmployees: number;
@@ -32,11 +43,16 @@ export type DashboardStats = {
   unreadPayslips: number;
   monthlyUploads: MonthlyUploadStat[];
   topUnread: TopUnreadRow[];
+  expiringContracts: ExpiringContractDashboardRow[];
+  departedThisMonth: number;
 };
 
 @Injectable()
 export class DashboardService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly departure: DepartureService,
+  ) {}
 
   private assertRhAdminWithCompany(actor: RequestUser): string {
     if (actor.role !== 'RH_ADMIN' || !actor.companyId) {
@@ -54,6 +70,7 @@ export class DashboardService {
 
     const monthStart = new Date(Date.UTC(cy, cm - 1, 1, 0, 0, 0, 0));
     const monthEnd = new Date(Date.UTC(cy, cm, 0, 23, 59, 59, 999));
+    const startOfMonthUtc = monthStart;
 
     const py = cm === 1 ? cy - 1 : cy;
     const pm = cm === 1 ? 12 : cm - 1;
@@ -66,12 +83,18 @@ export class DashboardService {
       periodPayslipsAgg,
       prevMonthPayslipsAgg,
       unreadPayslips,
+      expiringContractsRaw,
+      departedThisMonth,
     ] = await Promise.all([
       this.prisma.user.count({
         where: { companyId, role: 'EMPLOYEE' },
       }),
       this.prisma.user.count({
-        where: { companyId, role: 'EMPLOYEE', isActive: true },
+        where: {
+          companyId,
+          role: 'EMPLOYEE',
+          employmentStatus: { in: ['ACTIVE', 'ON_NOTICE'] },
+        },
       }),
       this.prisma.user.count({
         where: {
@@ -105,6 +128,15 @@ export class DashboardService {
       this.prisma.payslip.count({
         where: { companyId, isRead: false },
       }),
+      this.departure.getExpiringContracts(companyId, 30),
+      this.prisma.user.count({
+        where: {
+          companyId,
+          role: 'EMPLOYEE',
+          employmentStatus: 'DEPARTED',
+          departedAt: { gte: startOfMonthUtc, lte: monthEnd },
+        },
+      }),
     ]);
 
     const periodTotal = periodPayslipsAgg.length;
@@ -123,6 +155,18 @@ export class DashboardService {
 
     const topUnread = await this.buildTopUnread(companyId);
 
+    const expiringContracts: ExpiringContractDashboardRow[] =
+      expiringContractsRaw.slice(0, 5).map(({ user: u, daysRemaining }) => ({
+        userId: u.id,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        employeeId: u.employeeId,
+        departmentLabel:
+          u.orgDepartment?.name ?? u.department ?? null,
+        contractEndDate: u.contractEndDate!.toISOString(),
+        daysRemaining,
+      }));
+
     return {
       totalEmployees,
       activeEmployees,
@@ -134,6 +178,8 @@ export class DashboardService {
       unreadPayslips,
       monthlyUploads,
       topUnread,
+      expiringContracts,
+      departedThisMonth,
     };
   }
 

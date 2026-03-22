@@ -16,8 +16,15 @@ export default function App() {
               colorLink: '#0F5C5E',
               borderRadius: 8,
               colorBgLayout: '#F4F6F6',
-              fontSize: 15,
-              fontSizeLG: 16,
+              fontSize: 17,
+              fontSizeLG: 19,
+              fontSizeSM: 14,
+              fontSizeXL: 22,
+              fontSizeHeading1: 40,
+              fontSizeHeading2: 30,
+              fontSizeHeading3: 24,
+              fontSizeHeading4: 20,
+              fontSizeHeading5: 17,
             },
           }}
         >

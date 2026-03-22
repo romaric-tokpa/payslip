@@ -15,6 +15,29 @@ enum UserRole {
   EMPLOYEE    // collaborateur
 }
 
+enum EmploymentStatus {
+  PENDING   // Importé, pas encore activé
+  ACTIVE    // En activité
+  ON_NOTICE // En préavis
+  DEPARTED  // Sorti — compte gelé
+  ARCHIVED  // Purgé après rétention légale
+}
+
+enum ContractType {
+  CDI
+  CDD
+  INTERIM
+  STAGE
+}
+
+enum DepartureType {
+  RESIGNATION      // Démission
+  TERMINATION      // Licenciement
+  CONTRACT_END     // Fin de contrat CDD / intérim
+  RETIREMENT       // Retraite
+  MUTUAL_AGREEMENT // Rupture conventionnelle
+}
+
 model Company {
   id               String    @id @default(uuid())
   name             String
@@ -23,6 +46,8 @@ model Company {
   address          String?
   logoUrl          String?   @map("logo_url")
   subscriptionPlan String?   @map("subscription_plan")
+  /// Jours d’accès lecture seule après départ (mobile), défaut 90.
+  readOnlyDaysAfterDeparture Int @default(90) @map("read_only_days_after_departure")
   createdAt        DateTime  @default(now()) @map("created_at")
 
   users       User[]
@@ -106,6 +131,23 @@ model User {
   /// Clé objet S3 (companies/…/profiles/…), jamais l’URL brute.
   profilePhotoKey String? @map("profile_photo_key")
 
+  employmentStatus EmploymentStatus @default(ACTIVE) @map("employment_status")
+  contractType     ContractType?    @map("contract_type")
+  contractEndDate  DateTime?        @map("contract_end_date")
+
+  departureType   DepartureType? @map("departure_type")
+  departureReason String?        @map("departure_reason")
+  departureDate   DateTime?      @map("departure_date")
+  noticeStartDate DateTime?      @map("notice_start_date")
+  noticeEndDate   DateTime?      @map("notice_end_date")
+  departedAt      DateTime?      @map("departed_at")
+  departedById    String?        @map("departed_by_id")
+  departedBy      User?          @relation("UserDepartedByAdmin", fields: [departedById], references: [id], onDelete: SetNull)
+  usersMarkedDepartedByMe User[] @relation("UserDepartedByAdmin")
+
+  readOnlyUntil DateTime? @map("read_only_until")
+  archivedAt    DateTime? @map("archived_at")
+
   payslips           Payslip[]      @relation("PayslipOwner")
   uploadedPayslips   Payslip[]      @relation("PayslipUploader")
   auditLogs          AuditLog[]
@@ -116,6 +158,8 @@ model User {
   @@index([companyId])
   @@index([departmentId])
   @@index([serviceId])
+  @@index([employmentStatus])
+  @@index([departedById])
 }
 
 model Payslip {

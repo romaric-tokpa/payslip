@@ -36,43 +36,40 @@ export function BulkResultStep({
         <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
           <Row gutter={[8, 8]}>
             <Col xs={24} sm={8}>
-              <Card size="small" style={{ borderRadius: 10, background: '#EAFAF1', border: '0.5px solid #D5F5E3' }}>
-                <Text style={{ fontSize: 11, color: '#27AE60', fontWeight: 600 }}>
-                  Succès
-                </Text>
-                <div
-                  style={{ fontSize: 22, fontWeight: 700, color: '#27AE60' }}
-                >
+              <Card
+                size="small"
+                className="payslip-result-stat-card payslip-result-stat-card--success"
+              >
+                <Text className="payslip-result-stat-card__label">Succès</Text>
+                <div className="payslip-result-stat-card__value">
                   {report.success}
                 </div>
               </Card>
             </Col>
             <Col xs={24} sm={8}>
-              <Card size="small" style={{ borderRadius: 10, background: '#FDEDEC', border: '0.5px solid #FADBD8' }}>
-                <Text style={{ fontSize: 11, color: '#E74C3C', fontWeight: 600 }}>
-                  Échecs
-                </Text>
-                <div
-                  style={{ fontSize: 22, fontWeight: 700, color: '#E74C3C' }}
-                >
+              <Card
+                size="small"
+                className="payslip-result-stat-card payslip-result-stat-card--failed"
+              >
+                <Text className="payslip-result-stat-card__label">Échecs</Text>
+                <div className="payslip-result-stat-card__value">
                   {report.failed}
                 </div>
               </Card>
             </Col>
             <Col xs={24} sm={8}>
-              <Card size="small" style={{ borderRadius: 10, background: '#F4F6F6', border: '0.5px solid #E8E8E8' }}>
-                <Text style={{ fontSize: 11, color: '#7F8C8D', fontWeight: 600 }}>
-                  Ignorés
-                </Text>
-                <div
-                  style={{ fontSize: 22, fontWeight: 700, color: '#7F8C8D' }}
-                >
+              <Card
+                size="small"
+                className="payslip-result-stat-card payslip-result-stat-card--ignored"
+              >
+                <Text className="payslip-result-stat-card__label">Ignorés</Text>
+                <div className="payslip-result-stat-card__value">
                   {ignored}
                 </div>
               </Card>
             </Col>
           </Row>
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Text type="secondary" className="payslip-result-subline">
             Traitement de {report.total} fichier(s) dans cette confirmation.
           </Text>
         </Space>

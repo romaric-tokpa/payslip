@@ -57,6 +57,21 @@ export class UserImportMappingsDto {
   @IsOptional()
   @IsString()
   poste?: string;
+
+  @ApiPropertyOptional({ example: 'Type contrat' })
+  @IsOptional()
+  @IsString()
+  contractType?: string;
+
+  @ApiPropertyOptional({ example: 'Fin contrat' })
+  @IsOptional()
+  @IsString()
+  contractEndDate?: string;
+
+  @ApiPropertyOptional({ example: "Date d'entrée" })
+  @IsOptional()
+  @IsString()
+  entryDate?: string;
 }
 
 export class SplitFullNameDto {

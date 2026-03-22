@@ -76,6 +76,24 @@ export class ImportRowDto {
   @IsString()
   @MaxLength(200)
   directionName?: string;
+
+  @ApiPropertyOptional({ description: 'Type de contrat (texte fichier)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  contractType?: string;
+
+  @ApiPropertyOptional({ description: 'Date de fin de contrat (texte ou ISO)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  contractEndDate?: string;
+
+  @ApiPropertyOptional({ description: "Date d'entrée (texte ou ISO)" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  entryDate?: string;
 }
 
 export class ValidateImportBodyDto {

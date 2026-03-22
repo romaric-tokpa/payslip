@@ -6,6 +6,9 @@ const HEADER_TEXT = 'FFFFFFFF';
 const EXAMPLE_TEXT = 'FF666666';
 
 const EMAIL_COL = 4;
+const CONTRACT_TYPE_COL = 8;
+const ENTRY_DATE_COL = 9;
+const CONTRACT_END_COL = 10;
 /** Lignes 2…N : validation e-mail sur la colonne D. */
 const EMAIL_VALIDATION_LAST_ROW = 2000;
 
@@ -50,6 +53,9 @@ export async function buildEmployeeImportTemplateXlsx(): Promise<Buffer> {
     'Département',
     'Service',
     'Poste',
+    'Type de contrat',
+    "Date d'entrée",
+    'Date de fin de contrat',
   ]);
 
   const headerRow = ws.getRow(1);
@@ -74,10 +80,16 @@ export async function buildEmployeeImportTemplateXlsx(): Promise<Buffer> {
     'Finance',
     '',
     'Comptable',
+    'CDI',
+    '15/01/2024',
+    '',
   ]);
   const exampleRow = ws.getRow(2);
   exampleRow.font = { italic: true, color: { argb: EXAMPLE_TEXT } };
   exampleRow.alignment = { vertical: 'middle' };
+  for (const c of [ENTRY_DATE_COL, CONTRACT_END_COL]) {
+    exampleRow.getCell(c).numFmt = 'dd/mm/yyyy';
+  }
 
   const emailDvBase: Omit<ExcelJS.DataValidation, 'formulae'> = {
     type: 'custom',
@@ -102,7 +114,23 @@ export async function buildEmployeeImportTemplateXlsx(): Promise<Buffer> {
     };
   }
 
-  autoFitColumns(ws, 7);
+  const contractListDv: ExcelJS.DataValidation = {
+    type: 'list',
+    allowBlank: true,
+    showErrorMessage: true,
+    errorStyle: 'warning',
+    errorTitle: 'Valeur hors liste',
+    error: 'Utilisez : CDI, CDD, Intérim ou Stage.',
+    formulae: ['"CDI,CDD,Intérim,Stage"'],
+  };
+
+  for (let r = 2; r <= EMAIL_VALIDATION_LAST_ROW; r++) {
+    ws.getCell(r, CONTRACT_TYPE_COL).dataValidation = contractListDv;
+    ws.getCell(r, ENTRY_DATE_COL).numFmt = 'dd/mm/yyyy';
+    ws.getCell(r, CONTRACT_END_COL).numFmt = 'dd/mm/yyyy';
+  }
+
+  autoFitColumns(ws, 10);
 
   const instr = wb.addWorksheet('Instructions');
   instr.getColumn(1).width = 92;
@@ -115,7 +143,15 @@ export async function buildEmployeeImportTemplateXlsx(): Promise<Buffer> {
   const sections: readonly [string, string][] = [
     [
       'Champs obligatoires',
-      'Renseignez au minimum les colonnes Matricule*, Prénom*, Nom* et Email* pour chaque collaborateur. Département, Service (réf. organisation) et Poste sont optionnels. Le libellé du service doit exister dans votre structure (même orthographe que dans PaySlip).',
+      'Renseignez au minimum les colonnes Matricule*, Prénom*, Nom* et Email* pour chaque collaborateur. Département, Service, Poste, Type de contrat, dates de contrat sont optionnels.',
+    ],
+    [
+      'Type de contrat',
+      'Liste déroulante : CDI, CDD, Intérim, Stage. Pour les CDD, missions intérim et stages, renseignez aussi la date de fin de contrat (obligatoire pour les alertes d’échéance).',
+    ],
+    [
+      "Dates d'entrée et de fin",
+      "Format date JJ/MM/AAAA (ex. 31/12/2025). La date de fin de contrat est obligatoire pour les CDD, Intérim et Stage afin d'alimenter le tableau de bord « contrats à échéance ».",
     ],
     [
       'Matricule',

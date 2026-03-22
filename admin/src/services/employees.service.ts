@@ -4,16 +4,20 @@ import type {
   ActivationMessagingConfig,
   BulkActivateDto,
   BulkActivateResponse,
+  BulkDepartureDto,
   CreateEmployeePayload,
   EmployeeUser,
+  ExpiringContractRow,
   GetEmployeesParams,
   ImportEmployeesReport,
   ImportProgressEvent,
   ImportResultDetail,
   ImportResultDto,
   ImportRowDto,
+  InitiateDepartureDto,
   InviteEmployeeResponse,
   PaginatedEmployeesResponse,
+  ReinstateDto,
   UpdateEmployeePayload,
   UserImportConfigPayload,
   ValidateImportResponse,
@@ -21,8 +25,10 @@ import type {
 import { api } from './api'
 import { getAccessTokenFromStore } from './authStorage'
 
-function toQuery(params: GetEmployeesParams): Record<string, string | number> {
-  const q: Record<string, string | number> = {}
+function toQuery(
+  params: GetEmployeesParams,
+): Record<string, string | number | boolean> {
+  const q: Record<string, string | number | boolean> = {}
   if (params.page != null) q.page = params.page
   if (params.limit != null) q.limit = params.limit
   if (params.search != null && params.search !== '') q.search = params.search
@@ -37,6 +43,15 @@ function toQuery(params: GetEmployeesParams): Record<string, string | number> {
   }
   if (params.activationStatus != null && params.activationStatus !== 'all') {
     q.activationStatus = params.activationStatus
+  }
+  if (params.employmentFilter != null && params.employmentFilter !== 'all') {
+    q.employmentFilter = params.employmentFilter
+  }
+  if (params.contractType != null && params.contractType !== 'all') {
+    q.contractType = params.contractType
+  }
+  if (params.expiringContracts30d === true) {
+    q.expiringContracts30d = true
   }
   return q
 }
@@ -105,6 +120,57 @@ export async function deactivateEmployee(id: string): Promise<EmployeeUser> {
 
 export async function reactivateEmployee(id: string): Promise<EmployeeUser> {
   const { data } = await api.patch<EmployeeUser>(`/users/${id}/reactivate`)
+  return data
+}
+
+export async function initiateDepart(
+  userId: string,
+  body: InitiateDepartureDto,
+): Promise<EmployeeUser> {
+  const { data } = await api.post<EmployeeUser>(
+    `/users/${encodeURIComponent(userId)}/depart`,
+    body,
+  )
+  return data
+}
+
+export async function bulkDepart(body: BulkDepartureDto): Promise<{
+  departed: number
+  errors: { userId: string; reason: string }[]
+}> {
+  const { data } = await api.post<{
+    departed: number
+    errors: { userId: string; reason: string }[]
+  }>('/users/bulk-depart', body, { timeout: 120_000 })
+  return data
+}
+
+export async function reinstateUser(
+  userId: string,
+  body?: ReinstateDto,
+): Promise<EmployeeUser> {
+  const { data } = await api.post<EmployeeUser>(
+    `/users/${encodeURIComponent(userId)}/reinstate`,
+    body ?? {},
+  )
+  return data
+}
+
+export async function archiveDepartedUser(userId: string): Promise<EmployeeUser> {
+  const { data } = await api.post<EmployeeUser>(
+    `/users/${encodeURIComponent(userId)}/archive`,
+    { confirm: 'ARCHIVER' },
+  )
+  return data
+}
+
+export async function getExpiringContracts(
+  days: number = 30,
+): Promise<ExpiringContractRow[]> {
+  const { data } = await api.get<ExpiringContractRow[]>(
+    '/users/expiring-contracts',
+    { params: { days } },
+  )
   return data
 }
 

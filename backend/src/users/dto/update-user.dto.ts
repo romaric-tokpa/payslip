@@ -1,6 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { ContractType } from '@prisma/client';
 import {
+  IsDateString,
   IsEmail,
+  IsEnum,
   IsOptional,
   IsString,
   IsUUID,
@@ -49,4 +52,28 @@ export class UpdateUserDto {
   @ValidateIf((_, v) => v !== null && v !== undefined)
   @IsUUID('4')
   serviceId?: string | null;
+
+  @ApiPropertyOptional({ enum: ContractType, nullable: true })
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsEnum(ContractType)
+  contractType?: ContractType | null;
+
+  @ApiPropertyOptional({
+    description: 'Date de fin de contrat (ISO) ; null pour effacer',
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsDateString()
+  contractEndDate?: string | null;
+
+  @ApiPropertyOptional({
+    description: "Date d'entrée (ISO) ; null pour effacer",
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsDateString()
+  entryDate?: string | null;
 }

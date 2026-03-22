@@ -174,7 +174,8 @@ export function OrgList({ data, onEditRow, onDeleteRow }: OrgListProps) {
 
   return (
     <Table<OrgListRow>
-      size="small"
+      className="orgchart-list-table"
+      size="middle"
       rowKey="key"
       columns={columns}
       dataSource={rows}

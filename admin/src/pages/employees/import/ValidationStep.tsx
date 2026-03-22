@@ -19,6 +19,7 @@ import type { ColumnsType } from 'antd/es/table'
 import type { Key } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ADMIN_BASE } from '../../../constants/adminRoutes'
 import { adminTheme } from '../../../theme/adminTheme'
 import type {
   ImportRowDto,
@@ -381,7 +382,7 @@ export function ValidationStep({
                   type="link"
                   size="small"
                   style={{ paddingLeft: 0, fontSize: 10, height: 'auto' }}
-                  onClick={() => navigate('/employees')}
+                  onClick={() => navigate(`${ADMIN_BASE}/employees`)}
                 >
                   Voir le collaborateur existant
                 </Button>

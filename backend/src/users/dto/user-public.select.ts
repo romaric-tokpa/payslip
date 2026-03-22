@@ -32,6 +32,17 @@ export const userPublicSelect = {
   entryDate: true,
   createdAt: true,
   profilePhotoKey: true,
+  employmentStatus: true,
+  contractType: true,
+  contractEndDate: true,
+  departureType: true,
+  departureReason: true,
+  departureDate: true,
+  noticeStartDate: true,
+  noticeEndDate: true,
+  departedAt: true,
+  readOnlyUntil: true,
+  archivedAt: true,
 } satisfies Prisma.UserSelect;
 
 /** Ligne Prisma (contient la clé S3 interne). */

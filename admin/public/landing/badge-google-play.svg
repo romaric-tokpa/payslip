@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 54" role="img" aria-labelledby="gpTitle">
+  <title id="gpTitle">Disponible sur Google Play</title>
+  <rect width="200" height="54" rx="7" fill="#fff"/>
+  <!-- Marque Google Play (forme classique) -->
+  <path fill="#00D9FF" d="M11.5 12.2 11.5 41.8 30.2 27z"/>
+  <path fill="#FFC107" d="M11.5 12.2 30.2 27 36.5 22.5 11.5 9.5z"/>
+  <path fill="#00F076" d="M11.5 41.8 36.5 31.5 30.2 27z"/>
+  <path fill="#FF3A44" d="M36.5 22.5 30.2 27 36.5 31.5 43.5 27z"/>
+  <text x="52" y="21" fill="#5F6368" font-family="system-ui,Roboto,sans-serif" font-size="7.5" font-weight="500">Disponible sur</text>
+  <text x="52" y="35" fill="#202124" font-family="system-ui,Roboto,sans-serif" font-size="11.5" font-weight="600">Google Play</text>
+</svg>

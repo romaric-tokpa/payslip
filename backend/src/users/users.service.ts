@@ -26,6 +26,7 @@ import {
   type UserPublicRow,
 } from './dto/user-public.select';
 import { USER_AUDIT } from './users.constants';
+import { isUserOperational } from './user-lifecycle.util';
 import {
   IMPORT_MAX_BYTES,
   type ImportEmployeesReport,
@@ -48,6 +49,10 @@ import type {
 } from './dto/bulk-activate.dto';
 import type { UserImportConfigDto } from './dto/user-import-config.dto';
 import {
+  parseFlexibleImportDate,
+  parseImportContractType,
+} from './users-import.contract.util';
+import {
   extractImportFields,
   importHeadersSatisfyRequired,
   parseCsvBuffer,
@@ -58,6 +63,23 @@ import {
 } from './users-import.parse';
 
 const PROFILE_PHOTO_URL_TTL_SEC = 7 * 24 * 3600;
+
+/** bcrypt en parallèle par vagues pour accélérer l’activation masse sans saturer le CPU. */
+async function hashPasswordsInWaves(
+  hashOne: (plain: string) => Promise<string>,
+  plains: string[],
+  waveSize: number,
+): Promise<string[]> {
+  const out: string[] = new Array(plains.length);
+  for (let i = 0; i < plains.length; i += waveSize) {
+    const slice = plains.slice(i, i + waveSize);
+    const hashes = await Promise.all(slice.map((p) => hashOne(p)));
+    for (let j = 0; j < hashes.length; j += 1) {
+      out[i + j] = hashes[j];
+    }
+  }
+  return out;
+}
 
 export type PaginatedUsers = {
   data: UserPublicClient[];
@@ -156,6 +178,7 @@ export class UsersService {
       where: {
         role: 'EMPLOYEE',
         isActive: true,
+        employmentStatus: { in: ['ACTIVE', 'ON_NOTICE'] },
         employeeId: { equals: trimmed, mode: 'insensitive' },
       },
     });
@@ -344,6 +367,38 @@ export class UsersService {
       where.mustChangePassword = true;
     }
 
+    const emp = query.employmentFilter ?? 'all';
+    if (emp !== 'all') {
+      if (emp === 'active') {
+        where.employmentStatus = { in: ['ACTIVE', 'ON_NOTICE'] };
+      } else if (emp === 'on_notice') {
+        where.employmentStatus = 'ON_NOTICE';
+      } else if (emp === 'departed') {
+        where.employmentStatus = 'DEPARTED';
+      } else if (emp === 'pending') {
+        where.employmentStatus = 'PENDING';
+      } else if (emp === 'archived') {
+        where.employmentStatus = 'ARCHIVED';
+      }
+    }
+
+    const ct = query.contractType;
+    if (ct && ct !== 'all') {
+      where.contractType = ct;
+    }
+
+    if (query.expiringContracts30d) {
+      const horizon = new Date();
+      horizon.setDate(horizon.getDate() + 30);
+      where.contractType = { in: ['CDD', 'INTERIM', 'STAGE'] };
+      where.contractEndDate = {
+        not: null,
+        lte: horizon,
+        gte: new Date(),
+      };
+      where.employmentStatus = { in: ['ACTIVE', 'ON_NOTICE'] };
+    }
+
     if (query.search?.trim()) {
       const s = query.search.trim();
       where.OR = [
@@ -456,6 +511,17 @@ export class UsersService {
       }
       data.email = email;
     }
+    if (dto.contractType !== undefined) {
+      data.contractType = dto.contractType;
+    }
+    if (dto.contractEndDate !== undefined) {
+      data.contractEndDate = dto.contractEndDate
+        ? new Date(dto.contractEndDate)
+        : null;
+    }
+    if (dto.entryDate !== undefined) {
+      data.entryDate = dto.entryDate ? new Date(dto.entryDate) : null;
+    }
 
     if (Object.keys(data).length === 0) {
       const row = await this.prisma.user.findUniqueOrThrow({
@@ -492,6 +558,14 @@ export class UsersService {
     if (existing.companyId !== actor.companyId) {
       throw new ForbiddenException();
     }
+    if (
+      existing.employmentStatus === 'DEPARTED' ||
+      existing.employmentStatus === 'ARCHIVED'
+    ) {
+      throw new BadRequestException(
+        'Utilisez le flux « départ » ou « réintégration » pour ce collaborateur.',
+      );
+    }
 
     const updated = await this.prisma.user.update({
       where: { id },
@@ -523,6 +597,14 @@ export class UsersService {
     }
     if (existing.companyId !== actor.companyId) {
       throw new ForbiddenException();
+    }
+    if (
+      existing.employmentStatus === 'DEPARTED' ||
+      existing.employmentStatus === 'ARCHIVED'
+    ) {
+      throw new BadRequestException(
+        'Réactivation impossible : utilisez « Réintégrer » pour un collaborateur sorti.',
+      );
     }
 
     const updated = await this.prisma.user.update({
@@ -1029,6 +1111,9 @@ export class UsersService {
                   departmentId: c.row.departmentId ?? undefined,
                   serviceId: c.row.serviceId ?? undefined,
                   position: c.row.position ?? undefined,
+                  contractType: c.row.contractType ?? undefined,
+                  contractEndDate: c.row.contractEndDate ?? undefined,
+                  entryDate: c.row.entryDate ?? undefined,
                 },
                 adminUser,
               );
@@ -1083,6 +1168,18 @@ export class UsersService {
         if (p.serviceId) {
           updateDto.serviceId = p.serviceId;
         }
+        const impCtFile = parseImportContractType(p.f.contractType);
+        if (impCtFile) {
+          updateDto.contractType = impCtFile;
+        }
+        const impEndFile = parseFlexibleImportDate(p.f.contractEndDate);
+        if (impEndFile.ok) {
+          updateDto.contractEndDate = impEndFile.date.toISOString();
+        }
+        const impEntFile = parseFlexibleImportDate(p.f.entryDate);
+        if (impEntFile.ok) {
+          updateDto.entryDate = impEntFile.date.toISOString();
+        }
 
         try {
           await this.updateForRhAdmin(
@@ -1114,6 +1211,10 @@ export class UsersService {
         departmentLabel = deptNameById.get(p.departmentId) ?? departmentLabel;
       }
 
+      const impCtNew = parseImportContractType(p.f.contractType);
+      const impEndNew = parseFlexibleImportDate(p.f.contractEndDate);
+      const impEntNew = parseFlexibleImportDate(p.f.entryDate);
+
       createBuffer.push({
         line: p.line,
         row: {
@@ -1125,6 +1226,9 @@ export class UsersService {
           departmentId: p.departmentId ?? null,
           serviceId: p.serviceId ?? null,
           position: p.f.poste.trim() || null,
+          contractType: impCtNew ?? null,
+          contractEndDate: impEndNew.ok ? impEndNew.date.toISOString() : null,
+          entryDate: impEntNew.ok ? impEntNew.date.toISOString() : null,
         },
       });
 
@@ -1397,6 +1501,45 @@ export class UsersService {
         });
       }
 
+      const endFlex = parseFlexibleImportDate(row.contractEndDate);
+      if (row.contractEndDate?.trim() && !endFlex.ok && !endFlex.empty) {
+        errors.push({
+          field: 'contractEndDate',
+          message: 'Format de date non reconnu',
+          code: 'INVALID_DATE',
+        });
+      }
+      const entryFlex = parseFlexibleImportDate(row.entryDate);
+      if (row.entryDate?.trim() && !entryFlex.ok && !entryFlex.empty) {
+        errors.push({
+          field: 'entryDate',
+          message: 'Format de date non reconnu',
+          code: 'INVALID_DATE',
+        });
+      }
+
+      const ctRaw = row.contractType?.trim() ?? '';
+      const parsedContractType = parseImportContractType(row.contractType);
+      if (ctRaw && !parsedContractType) {
+        warnings.push({
+          field: 'contractType',
+          message: `Type de contrat non reconnu : « ${ctRaw} ». Sera importé sans type de contrat.`,
+          code: 'CONTRACT_TYPE_UNKNOWN',
+        });
+      }
+      const parsedEndIso = endFlex.ok ? endFlex.date.toISOString() : null;
+      if (
+        parsedContractType &&
+        ['CDD', 'INTERIM', 'STAGE'].includes(parsedContractType) &&
+        !parsedEndIso
+      ) {
+        warnings.push({
+          field: 'contractEndDate',
+          message: `Date de fin de contrat manquante pour un ${parsedContractType}`,
+          code: 'CONTRACT_END_MISSING',
+        });
+      }
+
       if (errors.length > 0) {
         status = 'error';
       } else if (status !== 'update' && warnings.length > 0) {
@@ -1615,15 +1758,15 @@ export class UsersService {
     );
 
     const importErrMessage = (e: unknown): string =>
-      e instanceof ConflictException
-        ? e.message
-        : e instanceof ForbiddenException
-          ? 'Opération interdite'
-          : e instanceof NotFoundException
-            ? 'Utilisateur introuvable'
-            : e instanceof Error
+            e instanceof ConflictException
               ? e.message
-              : 'Erreur inconnue';
+              : e instanceof ForbiddenException
+                ? 'Opération interdite'
+                : e instanceof NotFoundException
+                  ? 'Utilisateur introuvable'
+                  : e instanceof Error
+                    ? e.message
+                    : 'Erreur inconnue';
 
     const CREATE_BATCH = 50;
 
@@ -1678,6 +1821,9 @@ export class UsersService {
                   departmentId: c.row.departmentId ?? undefined,
                   serviceId: c.row.serviceId ?? undefined,
                   position: c.row.position ?? undefined,
+                  contractType: c.row.contractType ?? undefined,
+                  contractEndDate: c.row.contractEndDate ?? undefined,
+                  entryDate: c.row.entryDate ?? undefined,
                 },
                 adminUser,
               );
@@ -1728,8 +1874,8 @@ export class UsersService {
                 : 'E-mail déjà utilisé',
             errorField: 'email',
           });
-          continue;
-        }
+        continue;
+      }
 
         const updateDto: UpdateUserDto = {
           firstName: p.row.firstName.trim(),
@@ -1746,6 +1892,18 @@ export class UsersService {
         }
         if (p.serviceId) {
           updateDto.serviceId = p.serviceId;
+        }
+        const impCt = parseImportContractType(p.row.contractType);
+        if (impCt) {
+          updateDto.contractType = impCt;
+        }
+        const impEnd = parseFlexibleImportDate(p.row.contractEndDate);
+        if (impEnd.ok) {
+          updateDto.contractEndDate = impEnd.date.toISOString();
+        }
+        const impEnt = parseFlexibleImportDate(p.row.entryDate);
+        if (impEnt.ok) {
+          updateDto.entryDate = impEnt.date.toISOString();
         }
 
         try {
@@ -1782,9 +1940,9 @@ export class UsersService {
           employeeId: p.matriculeKey,
           status: 'error',
           errorMessage:
-            emailOwner.companyId === companyId
-              ? 'E-mail déjà utilisé par un autre collaborateur (matricule différent)'
-              : 'E-mail déjà utilisé',
+          emailOwner.companyId === companyId
+            ? 'E-mail déjà utilisé par un autre collaborateur (matricule différent)'
+            : 'E-mail déjà utilisé',
           errorField: 'email',
         });
         continue;
@@ -1794,6 +1952,10 @@ export class UsersService {
       if (p.departmentId) {
         departmentLabel = deptNameById.get(p.departmentId) ?? departmentLabel;
       }
+
+      const impCtCreate = parseImportContractType(p.row.contractType);
+      const impEndCreate = parseFlexibleImportDate(p.row.contractEndDate);
+      const impEntCreate = parseFlexibleImportDate(p.row.entryDate);
 
       createBuffer.push({
         rowIndex: p.row.rowIndex,
@@ -1806,6 +1968,11 @@ export class UsersService {
           departmentId: p.departmentId ?? null,
           serviceId: p.serviceId ?? null,
           position: p.row.position?.trim() || null,
+          contractType: impCtCreate ?? null,
+          contractEndDate: impEndCreate.ok
+            ? impEndCreate.date.toISOString()
+            : null,
+          entryDate: impEntCreate.ok ? impEntCreate.date.toISOString() : null,
         },
       });
 
@@ -1893,17 +2060,18 @@ export class UsersService {
     let emailsFailed = 0;
     let alreadyActive = 0;
 
-    const BATCH = 50;
+    /** Plus gros lots = moins d’allers-retours transaction ; hachage et UPDATE en parallèle à l’intérieur. */
+    const BATCH = 120;
+    const BCRYPT_WAVE = 16;
     for (let b = 0; b < uniqueIds.length; b += BATCH) {
       const idChunk = uniqueIds.slice(b, b + BATCH);
-      type Op = {
+      type RowWork = {
         userId: string;
         tempPassword: string;
-        hash: string;
         whatsappLink?: string;
         row: (typeof users)[number];
       };
-      const ops: Op[] = [];
+      const rowWorks: RowWork[] = [];
 
       for (const id of idChunk) {
         const user = userById.get(id);
@@ -1937,7 +2105,12 @@ export class UsersService {
           continue;
         }
 
-        if (user.isActive && !user.mustChangePassword) {
+        if (
+          user.role === 'EMPLOYEE' &&
+          isUserOperational(user) &&
+          user.isActive &&
+          !user.mustChangePassword
+        ) {
           resultByUserId.set(id, {
             userId: user.id,
             firstName: user.firstName,
@@ -1957,7 +2130,6 @@ export class UsersService {
           user.firstName,
           user.employeeId ?? undefined,
         );
-        const hash = await this.auth.hashPassword(tempPassword);
 
         let whatsappLink: string | undefined;
         if (dto.generateWhatsappLinks) {
@@ -1976,34 +2148,61 @@ export class UsersService {
           whatsappLink = `https://wa.me/?text=${msg}`;
         }
 
-        ops.push({
+        rowWorks.push({
           userId: user.id,
           tempPassword,
-          hash,
           whatsappLink,
           row: user,
         });
       }
 
-      if (ops.length > 0) {
+      if (rowWorks.length > 0) {
+        const hashes = await hashPasswordsInWaves(
+          (plain) => this.auth.hashPassword(plain),
+          rowWorks.map((w) => w.tempPassword),
+          BCRYPT_WAVE,
+        );
+
+        type Op = {
+          userId: string;
+          tempPassword: string;
+          hash: string;
+          whatsappLink?: string;
+          row: (typeof users)[number];
+        };
+        const ops: Op[] = rowWorks.map((w, i) => ({
+          userId: w.userId,
+          tempPassword: w.tempPassword,
+          hash: hashes[i],
+          whatsappLink: w.whatsappLink,
+          row: w.row,
+        }));
+
         await this.prisma.$transaction(
           async (tx) => {
-            for (const op of ops) {
-              await tx.session.deleteMany({
-                where: { userId: op.userId, deviceInfo: null },
-              });
-              await tx.user.update({
-                where: { id: op.userId },
-                data: {
-                  isActive: true,
-                  passwordHash: op.hash,
-                  mustChangePassword: true,
-                  tempPasswordExpiresAt: expiresAt,
-                },
-              });
-            }
+            const batchUserIds = ops.map((o) => o.userId);
+            await tx.session.deleteMany({
+              where: {
+                userId: { in: batchUserIds },
+                deviceInfo: null,
+              },
+            });
+            await Promise.all(
+              ops.map((op) =>
+                tx.user.update({
+                  where: { id: op.userId },
+                  data: {
+                    isActive: true,
+                    employmentStatus: 'ACTIVE',
+                    passwordHash: op.hash,
+                    mustChangePassword: true,
+                    tempPasswordExpiresAt: expiresAt,
+                  },
+                }),
+              ),
+            );
           },
-          { timeout: 120_000, maxWait: 60_000 },
+          { timeout: 180_000, maxWait: 90_000 },
         );
 
         for (const op of ops) {
@@ -2044,9 +2243,11 @@ export class UsersService {
     const activatedRows = credentials.filter((c) => c.status === 'activated');
     const emailFailedUserIds: string[] = [];
 
+    const EMAIL_WAVE = 50;
+    const EMAIL_PAUSE_MS = 200;
     if (dto.sendMethod === 'email' && activatedRows.length > 0) {
-      for (let i = 0; i < activatedRows.length; i += 20) {
-        const chunk = activatedRows.slice(i, i + 20);
+      for (let i = 0; i < activatedRows.length; i += EMAIL_WAVE) {
+        const chunk = activatedRows.slice(i, i + EMAIL_WAVE);
         const results = await Promise.allSettled(
           chunk.map((c) =>
             this.email.sendActivationEmail({
@@ -2070,9 +2271,9 @@ export class UsersService {
             emailFailedUserIds.push(chunk[j].userId);
           }
         }
-        if (i + 20 < activatedRows.length) {
+        if (i + EMAIL_WAVE < activatedRows.length && EMAIL_PAUSE_MS > 0) {
           await new Promise<void>((resolve) => {
-            setTimeout(resolve, 1000);
+            setTimeout(resolve, EMAIL_PAUSE_MS);
           });
         }
       }

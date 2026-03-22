@@ -1,7 +1,4 @@
-import { Typography } from 'antd'
-import { adminTheme } from '../theme/adminTheme'
-
-const { Text } = Typography
+import type { CSSProperties } from 'react'
 
 export interface StatCardProps {
   label: string
@@ -19,49 +16,18 @@ export function StatCard({
   subtitleColor,
 }: StatCardProps) {
   const subColor = subtitleColor ?? borderColor
+  const cssVars = {
+    '--stat-accent': borderColor,
+    '--stat-value': borderColor,
+    '--stat-sub': subColor,
+  } as CSSProperties
+
   return (
-    <div
-      style={{
-        background: adminTheme.white,
-        borderRadius: adminTheme.cardRadius,
-        padding: 14,
-        borderLeft: `3px solid ${borderColor}`,
-        boxSizing: 'border-box',
-      }}
-    >
-      <Text
-        style={{
-          display: 'block',
-          fontSize: 11,
-          color: adminTheme.gray,
-          textTransform: 'uppercase',
-          letterSpacing: 0.4,
-          marginBottom: 6,
-        }}
-      >
-        {label}
-      </Text>
-      <div
-        style={{
-          fontSize: 24,
-          fontWeight: 500,
-          color: borderColor,
-          lineHeight: 1.2,
-        }}
-      >
-        {value}
-      </div>
+    <div className="stat-card" style={cssVars}>
+      <span className="stat-card__label">{label}</span>
+      <div className="stat-card__value">{value}</div>
       {subtitle != null && subtitle !== '' ? (
-        <Text
-          style={{
-            display: 'block',
-            marginTop: 6,
-            fontSize: 11,
-            color: subColor,
-          }}
-        >
-          {subtitle}
-        </Text>
+        <span className="stat-card__subtitle">{subtitle}</span>
       ) : null}
     </div>
   )

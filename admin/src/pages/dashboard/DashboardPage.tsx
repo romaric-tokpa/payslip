@@ -1,6 +1,10 @@
-import { Alert, Card, Spin, Typography } from 'antd'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { CalendarOutlined, WarningOutlined } from '@ant-design/icons'
+import { Alert, Button, Card, Space, Spin, Tag, Typography } from 'antd'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import dayjs from 'dayjs'
+import 'dayjs/locale/fr'
 import { Link } from 'react-router-dom'
+import { ADMIN_BASE } from '../../constants/adminRoutes'
 import {
   Bar,
   BarChart,
@@ -14,9 +18,15 @@ import {
 import { StatCard } from '../../components/StatCard'
 import * as dashboardApi from '../../services/dashboard.service'
 import { adminTheme } from '../../theme/adminTheme'
-import type { DashboardStats, TopUnreadRow } from '../../types/dashboard'
+import type {
+  DashboardStats,
+  ExpiringContractDashboardRow,
+  TopUnreadRow,
+} from '../../types/dashboard'
 import { getApiErrorMessage } from '../../utils/apiErrorMessage'
 import './dashboard.css'
+
+dayjs.locale('fr')
 
 const MONTH_LABELS_SHORT = [
   'Jan',
@@ -86,6 +96,7 @@ function initials(firstName: string, lastName: string): string {
 }
 
 export function DashboardPage() {
+  const expiringCardRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -145,9 +156,31 @@ export function DashboardPage() {
       : undefined
 
   const topUnreadFive: TopUnreadRow[] = stats?.topUnread.slice(0, 5) ?? []
+  const expiringFive: ExpiringContractDashboardRow[] =
+    stats?.expiringContracts?.slice(0, 5) ?? []
+  const expiringTotal = stats?.expiringContracts?.length ?? 0
+
+  function urgencyTag(days: number) {
+    if (days < 7) {
+      return <Tag color="red">Urgent</Tag>
+    }
+    if (days <= 15) {
+      return <Tag color="orange">Bientôt</Tag>
+    }
+    return <Tag>30 j.</Tag>
+  }
+
+  const todayLabel = useMemo(
+    () =>
+      dayjs().format('dddd D MMMM YYYY').replace(/^\w/, (c) => c.toUpperCase()),
+    [],
+  )
 
   return (
     <div className="dashboard-page">
+      <header className="dashboard-intro" aria-label="Date du jour">
+        <span className="dashboard-intro__date">{todayLabel}</span>
+      </header>
       {loadError != null && !loading ? (
         <Alert
           type="error"
@@ -166,6 +199,29 @@ export function DashboardPage() {
         <div className="dashboard-spin-inner">
           {stats != null ? (
             <>
+              {expiringTotal > 0 ? (
+                <Alert
+                  type="warning"
+                  showIcon
+                  icon={<WarningOutlined />}
+                  className="dashboard-alert-expiring"
+                  message={`${expiringTotal} contrat(s) arrivent à échéance dans les 30 prochains jours`}
+                  action={
+                    <Button
+                      size="small"
+                      type="primary"
+                      onClick={() =>
+                        expiringCardRef.current?.scrollIntoView({
+                          behavior: 'smooth',
+                          block: 'start',
+                        })
+                      }
+                    >
+                      Gérer
+                    </Button>
+                  }
+                />
+              ) : null}
               <div className="dashboard-stat-grid">
                 <StatCard
                   label="Collaborateurs actifs"
@@ -197,11 +253,18 @@ export function DashboardPage() {
                   }
                   subtitleColor={adminTheme.orange}
                 />
+                <StatCard
+                  label="Sortis ce mois"
+                  value={stats.departedThisMonth}
+                  borderColor="#8c8c8c"
+                  subtitle="Départs enregistrés"
+                  subtitleColor="#8c8c8c"
+                />
               </div>
 
               <div className="dashboard-lower-grid">
                 <Card
-                  className="dashboard-white-card"
+                  className="dashboard-white-card dashboard-chart-card"
                   title={
                     <span className="dashboard-card-title">
                       Distribution mensuelle
@@ -215,20 +278,24 @@ export function DashboardPage() {
                         data={chartData}
                         margin={{ top: 8, right: 16, left: 0, bottom: 8 }}
                       >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#E8E8E8" />
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="rgba(28,40,51,0.08)"
+                          vertical={false}
+                        />
                         <XAxis
                           dataKey="label"
-                          tick={{ fontSize: 11, fill: adminTheme.gray }}
+                          tick={{ fontSize: 13, fill: adminTheme.gray }}
                           interval={0}
                         />
                         <YAxis
                           allowDecimals={false}
-                          tick={{ fontSize: 12, fill: adminTheme.gray }}
+                          tick={{ fontSize: 13, fill: adminTheme.gray }}
                         />
                         <Tooltip content={<UploadsTooltip />} />
                         <Bar
                           dataKey="count"
-                          radius={[4, 4, 0, 0]}
+                          radius={[8, 8, 0, 0]}
                           name="Bulletins"
                         >
                           {chartData.map((entry) => (
@@ -237,7 +304,7 @@ export function DashboardPage() {
                               fill={
                                 entry.isCurrent
                                   ? '#0F5C5E'
-                                  : '#E8F5F5'
+                                  : 'rgba(15, 92, 94, 0.18)'
                               }
                             />
                           ))}
@@ -253,7 +320,7 @@ export function DashboardPage() {
                     <div className="dashboard-unread-card__head">
                       <span className="dashboard-card-title">Non consultés</span>
                       <Link
-                        to="/payslips"
+                        to={`${ADMIN_BASE}/payslips`}
                         className="dashboard-unread-see-all"
                       >
                         Voir tout
@@ -284,6 +351,66 @@ export function DashboardPage() {
                           <span className="dashboard-unread-badge">
                             {row.lastPayslipPeriod}
                           </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Card>
+              </div>
+
+              <div ref={expiringCardRef} className="dashboard-expiring-block">
+                <Card
+                  className="dashboard-white-card"
+                  title={
+                    <div className="dashboard-unread-card__head">
+                      <span className="dashboard-card-title">
+                        <CalendarOutlined
+                          style={{ color: adminTheme.orange, marginRight: 8 }}
+                        />
+                        Contrats à échéance
+                      </span>
+                      {expiringTotal > 0 ? (
+                        <Tag color="orange">{expiringTotal}</Tag>
+                      ) : null}
+                      <Link
+                        to={`${ADMIN_BASE}/employees?expiringContracts=1`}
+                        className="dashboard-unread-see-all"
+                      >
+                        Voir tous les contrats
+                      </Link>
+                    </div>
+                  }
+                  styles={{ body: { paddingTop: 8 } }}
+                >
+                  {expiringFive.length === 0 ? (
+                    <Typography.Text type="secondary">
+                      Aucun CDD / intérim / stage à échéance dans les 30
+                      prochains jours
+                    </Typography.Text>
+                  ) : (
+                    <ul className="dashboard-unread-list">
+                      {expiringFive.map((row) => (
+                        <li
+                          key={row.userId}
+                          className="dashboard-unread-item"
+                        >
+                          <div className="dashboard-unread-avatar">
+                            {initials(row.firstName, row.lastName)}
+                          </div>
+                          <div className="dashboard-unread-meta">
+                            <div className="dashboard-unread-name">
+                              {row.lastName} {row.firstName}
+                            </div>
+                            <div className="dashboard-unread-dept">
+                              {row.departmentLabel ?? '—'}
+                            </div>
+                          </div>
+                          <Space size={8}>
+                            {urgencyTag(row.daysRemaining)}
+                            <span className="dashboard-unread-badge">
+                              J-{row.daysRemaining}
+                            </span>
+                          </Space>
                         </li>
                       ))}
                     </ul>

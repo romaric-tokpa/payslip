@@ -20,6 +20,7 @@ import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { ADMIN_BASE } from '../constants/adminRoutes'
 import * as employeesApi from '../services/employees.service'
 import * as payslipsApi from '../services/payslips.service'
 import type { EmployeeUser } from '../types/employees'
@@ -34,8 +35,6 @@ import {
 import './employees/employees.css'
 import './payslips/payslips-list.css'
 import { PayslipsKanban } from './payslips/PayslipsKanban'
-
-const TEAL = '#0F5C5E'
 
 type PayslipsViewMode = 'list' | 'kanban'
 
@@ -342,10 +341,11 @@ export function PayslipsPage() {
               size={40}
               src={row.user.profilePhotoUrl || undefined}
               alt=""
+              className="payslips-table-avatar"
             >
               {payslipUserInitials(row.user)}
             </Avatar>
-            <span>
+            <span className="payslips-table-name">
               {row.user.lastName} {row.user.firstName}
             </span>
           </Space>
@@ -427,12 +427,12 @@ export function PayslipsPage() {
       groupedByPayMonth.map((g) => ({
         key: String(g.sortKey),
         label: (
-          <Space size="middle" wrap>
-            <strong>{g.title}</strong>
-            <Tag color="processing">
+          <div className="payslips-collapse-header">
+            <span className="payslips-collapse-header__title">{g.title}</span>
+            <Tag className="payslips-collapse-header__count">
               {g.rows.length} bulletin{g.rows.length > 1 ? 's' : ''}
             </Tag>
-          </Space>
+          </div>
         ),
         children: (
           <Table<Payslip>
@@ -451,15 +451,15 @@ export function PayslipsPage() {
   )
 
   return (
-    <div>
+    <div className="payslips-page">
       <PageHeader
         actions={
           <Space wrap>
             <Button
               type="primary"
               icon={<UploadOutlined />}
-              style={{ backgroundColor: TEAL }}
-              onClick={() => navigate('/payslips/upload')}
+              className="employees-btn-primary-teal"
+              onClick={() => navigate(`${ADMIN_BASE}/payslips/upload`)}
             >
               Importer des bulletins
             </Button>
@@ -467,75 +467,82 @@ export function PayslipsPage() {
         }
       />
 
-      <div className="employees-filters">
-        <Select
-          allowClear
-          placeholder="Année"
-          style={{ width: 110 }}
-          value={year}
-          onChange={(v) => setYear(v ?? undefined)}
-          options={yearOptions().map((y) => ({ value: y, label: String(y) }))}
-        />
-        <Select
-          allowClear
-          placeholder="Mois"
-          style={{ minWidth: 140 }}
-          value={month}
-          onChange={(v) => setMonth(v ?? undefined)}
-          options={MONTH_OPTIONS}
-        />
-        <Select
-          showSearch
-          allowClear
-          placeholder="Collaborateur"
-          style={{ minWidth: 280, flex: 1, maxWidth: 420 }}
-          filterOption={false}
-          loading={optionsLoading}
-          value={filterUserId}
-          onSearch={setSearchInput}
-          onChange={(v) => setUserIdFilter(v ?? undefined)}
-          options={mergedEmployeeSelectOptions}
-          notFoundContent={optionsLoading ? undefined : null}
-        />
-        <Button onClick={resetFilters}>Réinitialiser</Button>
-        <Space size={8} wrap>
-          <Tag color="processing">{total} bulletin(s)</Tag>
-          {groupedByPayMonth.length > 0 ? (
-            <Tag>{groupedByPayMonth.length} mois</Tag>
-          ) : null}
-          {truncated ? <Tag color="warning">Liste tronquée</Tag> : null}
-        </Space>
-      </div>
+      <p className="payslips-page-lead">
+        Filtrez par période ou par personne, consultez les PDF et suivez la lecture
+        côté collaborateur — en liste par mois ou en colonnes Kanban.
+      </p>
 
-      <div className="employees-view-toggle-wrap">
+      <section className="payslips-toolbar" aria-label="Filtres bulletins">
+        <div className="payslips-toolbar__filters">
+          <Select
+            allowClear
+            className="employees-filter-select payslips-filter-year"
+            placeholder="Année"
+            value={year}
+            onChange={(v) => setYear(v ?? undefined)}
+            options={yearOptions().map((y) => ({ value: y, label: String(y) }))}
+          />
+          <Select
+            allowClear
+            className="employees-filter-select payslips-filter-month"
+            placeholder="Mois"
+            value={month}
+            onChange={(v) => setMonth(v ?? undefined)}
+            options={MONTH_OPTIONS}
+          />
+          <Select
+            showSearch
+            allowClear
+            className="employees-filter-select payslips-filter-employee"
+            placeholder="Collaborateur"
+            filterOption={false}
+            loading={optionsLoading}
+            value={filterUserId}
+            onSearch={setSearchInput}
+            onChange={(v) => setUserIdFilter(v ?? undefined)}
+            options={mergedEmployeeSelectOptions}
+            notFoundContent={optionsLoading ? undefined : null}
+          />
+          <Button className="payslips-reset-filters" onClick={resetFilters}>
+            Réinitialiser
+          </Button>
+        </div>
+        <div className="payslips-toolbar__stats">
+          <Tag className="payslips-stat-tag payslips-stat-tag--primary">
+            {total} bulletin{total === 1 ? '' : 's'}
+          </Tag>
+          {groupedByPayMonth.length > 0 ? (
+            <Tag className="payslips-stat-tag">
+              {groupedByPayMonth.length} mois affiché
+              {groupedByPayMonth.length > 1 ? 's' : ''}
+            </Tag>
+          ) : null}
+          {truncated ? (
+            <Tag className="payslips-stat-tag payslips-stat-tag--warning">
+              Liste tronquée — affinez les filtres
+            </Tag>
+          ) : null}
+        </div>
+      </section>
+
+      <div className="employees-view-panel payslips-view-panel">
+        <span className="employees-view-panel__label">Affichage</span>
         <Segmented<PayslipsViewMode>
           value={viewMode}
           onChange={setViewMode}
           options={[
             {
               label: (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}
-                >
+                <span className="employees-segment-label">
                   <TableOutlined />
-                  Liste
+                  Liste par mois
                 </span>
               ),
               value: 'list',
             },
             {
               label: (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}
-                >
+                <span className="employees-segment-label">
                   <PartitionOutlined />
                   Kanban
                 </span>
@@ -557,24 +564,31 @@ export function PayslipsPage() {
             onDelete={confirmDelete}
           />
         ) : listLoading ? (
-          <Table<Payslip>
-            rowKey="id"
-            columns={columns}
-            dataSource={[]}
-            loading
-            pagination={false}
-          />
+          <div className="payslips-table-shell">
+            <Table<Payslip>
+              rowKey="id"
+              className="payslips-main-table"
+              columns={columns}
+              dataSource={[]}
+              loading
+              pagination={false}
+            />
+          </div>
         ) : groupedByPayMonth.length === 0 ? (
-          <Table<Payslip>
-            rowKey="id"
-            columns={columns}
-            dataSource={[]}
-            loading={false}
-            pagination={false}
-            locale={{ emptyText: 'Aucun bulletin pour ces critères.' }}
-          />
+          <div className="payslips-table-shell">
+            <Table<Payslip>
+              rowKey="id"
+              className="payslips-main-table"
+              columns={columns}
+              dataSource={[]}
+              loading={false}
+              pagination={false}
+              locale={{ emptyText: 'Aucun bulletin pour ces critères.' }}
+            />
+          </div>
         ) : (
           <Collapse
+            className="payslips-collapse"
             key={`pc-${filterUserId ?? 'all'}-${year ?? 'y'}-${month ?? 'm'}`}
             bordered={false}
             defaultActiveKey={collapseDefaultKeys}

@@ -16,7 +16,8 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import type { SignOptions } from 'jsonwebtoken';
-import { Prisma, User, UserRole } from '@prisma/client';
+import { EmploymentStatus, Prisma, User, UserRole } from '@prisma/client';
+import type { ContractType } from '@prisma/client';
 import { OrganizationService } from '../organization/organization.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
@@ -41,6 +42,8 @@ export type AuthUserView = {
   role: UserRole;
   companyId: string | null;
   mustChangePassword: boolean;
+  employmentStatus: EmploymentStatus;
+  readOnlyUntil: string | null;
 };
 
 export type TokenPair = {
@@ -58,6 +61,10 @@ export type BulkInviteEmployeeRow = {
   departmentId: string | null;
   serviceId: string | null;
   position: string | null;
+  contractType?: ContractType | null;
+  /** ISO ou chaîne parsable côté service */
+  contractEndDate?: string | null;
+  entryDate?: string | null;
 };
 
 @Injectable()
@@ -115,6 +122,7 @@ export class AuthService {
           role: 'RH_ADMIN',
           companyId: company.id,
           employeeId: null,
+          employmentStatus: 'ACTIVE',
         },
       });
     });
@@ -145,13 +153,6 @@ export class AuthService {
       throw new UnauthorizedException('Identifiants invalides');
     }
 
-    if (!user.isActive) {
-      throw new HttpException(
-        'Compte verrouillé ou désactivé',
-        HttpStatus.LOCKED,
-      );
-    }
-
     const valid = await bcrypt.compare(password, user.passwordHash);
 
     if (!valid) {
@@ -165,6 +166,35 @@ export class AuthService {
     ) {
       throw new UnauthorizedException(
         'Votre mot de passe temporaire a expiré. Contactez votre RH pour obtenir un nouveau lien d\'activation.',
+      );
+    }
+
+    if (user.employmentStatus === 'ARCHIVED') {
+      throw new UnauthorizedException(
+        'Votre compte a été archivé. Contactez votre ancien employeur.',
+      );
+    }
+
+    if (user.role === 'EMPLOYEE' && user.employmentStatus === 'PENDING') {
+      throw new UnauthorizedException(
+        "Votre compte n'est pas encore activé. Utilisez le code d'activation reçu par e-mail.",
+      );
+    }
+
+    if (user.role === 'EMPLOYEE' && user.employmentStatus === 'DEPARTED') {
+      if (
+        !user.readOnlyUntil ||
+        new Date() > user.readOnlyUntil
+      ) {
+        throw new UnauthorizedException(
+          'Votre accès a expiré. Vos bulletins ne sont plus consultables en ligne. ' +
+            'Contactez votre ancien service RH pour obtenir vos documents.',
+        );
+      }
+    } else if (!user.isActive) {
+      throw new HttpException(
+        'Compte verrouillé ou désactivé',
+        HttpStatus.LOCKED,
       );
     }
 
@@ -237,6 +267,35 @@ export class AuthService {
       );
     }
 
+    if (user.employmentStatus === 'ARCHIVED') {
+      throw new UnauthorizedException(
+        'Votre compte a été archivé. Contactez votre ancien employeur.',
+      );
+    }
+
+    if (user.employmentStatus === 'PENDING') {
+      throw new UnauthorizedException(
+        "Votre compte n'est pas encore activé. Utilisez le code d'activation reçu par e-mail.",
+      );
+    }
+
+    if (user.employmentStatus === 'DEPARTED') {
+      if (
+        !user.readOnlyUntil ||
+        new Date() > user.readOnlyUntil
+      ) {
+        throw new UnauthorizedException(
+          'Votre accès a expiré. Vos bulletins ne sont plus consultables en ligne. ' +
+            'Contactez votre ancien service RH pour obtenir vos documents.',
+        );
+      }
+    } else if (!user.isActive) {
+      throw new HttpException(
+        'Compte verrouillé ou désactivé',
+        HttpStatus.LOCKED,
+      );
+    }
+
     await this.prisma.auditLog.create({
       data: {
         userId: user.id,
@@ -274,10 +333,32 @@ export class AuthService {
           expiresAt: { gt: new Date() },
           deviceInfo: null,
         },
-        include: { user: true },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              role: true,
+              companyId: true,
+              isActive: true,
+              employmentStatus: true,
+              readOnlyUntil: true,
+            },
+          },
+        },
       });
 
-      if (!found || !found.user.isActive) {
+      if (!found) {
+        return null;
+      }
+      const u = found.user;
+      const allowRefresh =
+        u.isActive ||
+        (u.role === 'EMPLOYEE' &&
+          u.employmentStatus === 'DEPARTED' &&
+          u.readOnlyUntil != null &&
+          new Date() <= u.readOnlyUntil);
+      if (!allowRefresh) {
         return null;
       }
 
@@ -478,6 +559,12 @@ export class AuthService {
             companyId: inviter.companyId,
             passwordHash,
             isActive: false,
+            employmentStatus: 'PENDING',
+            contractType: dto.contractType ?? null,
+            contractEndDate: dto.contractEndDate
+              ? new Date(dto.contractEndDate)
+              : null,
+            entryDate: dto.entryDate ? new Date(dto.entryDate) : null,
           },
         });
 
@@ -566,6 +653,12 @@ export class AuthService {
                 companyId,
                 passwordHash,
                 isActive: false,
+                employmentStatus: 'PENDING',
+                contractType: dto.contractType ?? null,
+                contractEndDate: dto.contractEndDate
+                  ? new Date(dto.contractEndDate)
+                  : null,
+                entryDate: dto.entryDate ? new Date(dto.entryDate) : null,
               },
             });
             await tx.session.create({
@@ -622,6 +715,11 @@ export class AuthService {
     if (user.isActive) {
       throw new BadRequestException(
         'Ce compte est déjà activé : le collaborateur doit se connecter avec son mot de passe.',
+      );
+    }
+    if (user.employmentStatus !== 'PENDING') {
+      throw new BadRequestException(
+        'Seuls les collaborateurs en attente d’activation peuvent recevoir un nouveau code.',
       );
     }
 
@@ -694,6 +792,7 @@ export class AuthService {
         where: { id: user.id },
         data: {
           isActive: true,
+          employmentStatus: 'ACTIVE',
           passwordHash,
           mustChangePassword: false,
           tempPasswordExpiresAt: null,
@@ -887,6 +986,10 @@ export class AuthService {
       role: user.role,
       companyId: user.companyId,
       mustChangePassword: user.mustChangePassword,
+      employmentStatus: user.employmentStatus,
+      readOnlyUntil: user.readOnlyUntil
+        ? user.readOnlyUntil.toISOString()
+        : null,
     };
   }
 

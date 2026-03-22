@@ -36,6 +36,45 @@ export async function logout(refreshToken: string): Promise<void> {
   await api.post('/auth/logout', { refreshToken })
 }
 
+export async function registerAccount(body: {
+  email: string
+  password: string
+  firstName: string
+  lastName: string
+  companyName: string
+  companyRccm?: string
+}): Promise<AuthSessionPayload> {
+  const { data } = await api.post<AuthSessionPayload>('/auth/register', body)
+  return data
+}
+
+export type ForgotPasswordResponse = {
+  message: string
+  resetToken?: string
+  resetUrl?: string
+}
+
+export async function forgotPassword(
+  email: string,
+): Promise<ForgotPasswordResponse> {
+  const { data } = await api.post<ForgotPasswordResponse>(
+    '/auth/forgot-password',
+    { email },
+  )
+  return data
+}
+
+export async function resetPasswordWithToken(body: {
+  resetToken: string
+  newPassword: string
+}): Promise<{ message: string }> {
+  const { data } = await api.post<{ message: string }>(
+    '/auth/reset-password',
+    body,
+  )
+  return data
+}
+
 export async function changePassword(body: {
   currentPassword: string
   newPassword: string

@@ -2,11 +2,14 @@ import {
   PartitionOutlined,
   PlusOutlined,
   TableOutlined,
+  ThunderboltOutlined,
   UploadOutlined,
+  UserDeleteOutlined,
 } from '@ant-design/icons'
 import {
   App,
   Button,
+  Checkbox,
   Input,
   Modal,
   Segmented,
@@ -17,16 +20,20 @@ import {
   Typography,
 } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { ADMIN_BASE } from '../../constants/adminRoutes'
 import { PageHeader } from '../../components/PageHeader'
 import * as employeesApi from '../../services/employees.service'
 import * as orgApi from '../../services/organization.service'
 import type { EmployeeUser } from '../../types/employees'
 import type { OrgDepartment } from '../../types/organization'
 import { getApiErrorMessage } from '../../utils/apiErrorMessage'
+import { BulkDepartureModal } from './BulkDepartureModal'
+import { DepartureModal } from './DepartureModal'
 import { EmployeeFormModal } from './EmployeeFormModal'
 import { EmployeeKanban } from './EmployeeKanban'
 import { EmployeeTable } from './EmployeeTable'
+import { ReinstateModal } from './ReinstateModal'
 import { ActivationStep } from './import/ActivationStep'
 import './employees.css'
 
@@ -85,6 +92,7 @@ function ActivationCodeModalContent({
 export function EmployeesPage() {
   const { message, modal } = App.useApp()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(20)
   const [searchInput, setSearchInput] = useState('')
@@ -114,10 +122,47 @@ export function EmployeesPage() {
   const [activationFilter, setActivationFilter] = useState<
     'all' | 'active' | 'inactive' | 'pending_password'
   >('all')
+  const [employmentFilter, setEmploymentFilter] = useState<
+    | 'all'
+    | 'active'
+    | 'on_notice'
+    | 'departed'
+    | 'pending'
+    | 'archived'
+  >('all')
+  const [contractTypeFilter, setContractTypeFilter] = useState<
+    'all' | 'CDI' | 'CDD' | 'INTERIM' | 'STAGE'
+  >('all')
+  const [expiringContractsOnly, setExpiringContractsOnly] = useState(false)
+  const [showContractColumn, setShowContractColumn] = useState(false)
+  const [departureUser, setDepartureUser] = useState<EmployeeUser | null>(null)
+  const [bulkDepartOpen, setBulkDepartOpen] = useState(false)
+  const [reinstateUser, setReinstateUser] = useState<EmployeeUser | null>(null)
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
+  /** Conserve la fiche de chaque ligne cochée (y compris hors page courante). */
+  const [selectedEmployeesById, setSelectedEmployeesById] = useState<
+    Record<string, EmployeeUser>
+  >({})
   const [bulkOpen, setBulkOpen] = useState(false)
   const [bulkIds, setBulkIds] = useState<string[]>([])
   const [bulkTitle, setBulkTitle] = useState('')
+  const [activateAllInactiveLoading, setActivateAllInactiveLoading] =
+    useState(false)
+
+  useEffect(() => {
+    const ec = searchParams.get('expiringContracts')
+    if (ec === '1' || ec === 'true') {
+      setExpiringContractsOnly(true)
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('expiringContracts')
+          return next
+        },
+        { replace: true },
+      )
+    }
+  }, [searchParams, setSearchParams])
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -128,11 +173,26 @@ export function EmployeesPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, departmentIdFilter, activationFilter])
+  }, [
+    debouncedSearch,
+    departmentIdFilter,
+    activationFilter,
+    employmentFilter,
+    contractTypeFilter,
+    expiringContractsOnly,
+  ])
 
   useEffect(() => {
     setSelectedRowKeys([])
-  }, [debouncedSearch, departmentIdFilter, activationFilter])
+    setSelectedEmployeesById({})
+  }, [
+    debouncedSearch,
+    departmentIdFilter,
+    activationFilter,
+    employmentFilter,
+    contractTypeFilter,
+    expiringContractsOnly,
+  ])
 
   useEffect(() => {
     void orgApi
@@ -155,6 +215,11 @@ export function EmployeesPage() {
         departmentId: departmentIdFilter,
         activationStatus:
           activationFilter === 'all' ? undefined : activationFilter,
+        employmentFilter:
+          employmentFilter === 'all' ? undefined : employmentFilter,
+        contractType:
+          contractTypeFilter === 'all' ? undefined : contractTypeFilter,
+        expiringContracts30d: expiringContractsOnly || undefined,
       })
       setDataSource(res.data)
       setTotal(res.meta.total)
@@ -165,7 +230,17 @@ export function EmployeesPage() {
     } finally {
       setListLoading(false)
     }
-  }, [page, limit, debouncedSearch, departmentIdFilter, activationFilter, message])
+  }, [
+    page,
+    limit,
+    debouncedSearch,
+    departmentIdFilter,
+    activationFilter,
+    employmentFilter,
+    contractTypeFilter,
+    expiringContractsOnly,
+    message,
+  ])
 
   useEffect(() => {
     void loadEmployees()
@@ -186,6 +261,11 @@ export function EmployeesPage() {
           departmentId: departmentIdFilter,
           activationStatus:
             activationFilter === 'all' ? undefined : activationFilter,
+          employmentFilter:
+            employmentFilter === 'all' ? undefined : employmentFilter,
+          contractType:
+            contractTypeFilter === 'all' ? undefined : contractTypeFilter,
+          expiringContracts30d: expiringContractsOnly || undefined,
         })
         if (pageNum === 1) {
           reportedTotal = res.meta.total
@@ -211,7 +291,15 @@ export function EmployeesPage() {
     } finally {
       setKanbanLoading(false)
     }
-  }, [debouncedSearch, departmentIdFilter, activationFilter, message])
+  }, [
+    debouncedSearch,
+    departmentIdFilter,
+    activationFilter,
+    employmentFilter,
+    contractTypeFilter,
+    expiringContractsOnly,
+    message,
+  ])
 
   useEffect(() => {
     if (viewMode !== 'kanban') {
@@ -240,6 +328,82 @@ export function EmployeesPage() {
       message.error(getApiErrorMessage(e, 'Échec du téléchargement'))
     }
   }
+
+  /** Tous les collaborateurs (EMPLOYEE) inactifs correspondant aux filtres recherche + département. */
+  const fetchAllInactiveEmployeeIds = useCallback(async (): Promise<
+    string[]
+  > => {
+    const all: EmployeeUser[] = []
+    let pageNum = 1
+    const pageSize = 100
+    let reportedTotal = 0
+    while (true) {
+      const res = await employeesApi.getEmployees({
+        page: pageNum,
+        limit: pageSize,
+        search: debouncedSearch || undefined,
+        departmentId: departmentIdFilter,
+        activationStatus: 'inactive',
+      })
+      if (pageNum === 1) {
+        reportedTotal = res.meta.total
+      }
+      all.push(...res.data)
+      if (
+        res.data.length < pageSize ||
+        all.length >= reportedTotal ||
+        pageNum >= 80
+      ) {
+        break
+      }
+      pageNum += 1
+    }
+    return all.filter((r) => r.role === 'EMPLOYEE').map((r) => r.id)
+  }, [debouncedSearch, departmentIdFilter])
+
+  const handleActivateAllInactive = useCallback(async () => {
+    setActivateAllInactiveLoading(true)
+    try {
+      const ids = await fetchAllInactiveEmployeeIds()
+      if (ids.length === 0) {
+        message.warning(
+          'Aucun collaborateur inactif ne correspond à la recherche ou au département sélectionné.',
+        )
+        return
+      }
+      modal.confirm({
+        title: 'Activer tous les comptes inactifs ?',
+        content: (
+          <div>
+            <p style={{ marginBottom: 8 }}>
+              <strong>{ids.length}</strong> compte(s) collaborateur inactif(s)
+              seront activés avec un mot de passe temporaire. Les filtres
+              actuels (recherche, département) sont pris en compte.
+            </p>
+            <p style={{ margin: 0, fontSize: 12, color: '#666' }}>
+              Vous choisirez ensuite le canal (e-mail, PDF, etc.) comme pour une
+              activation groupée.
+            </p>
+          </div>
+        ),
+        okText: 'Continuer',
+        cancelText: 'Annuler',
+        width: 480,
+        onOk: () => {
+          openBulkModal(ids, 'Activer tous les comptes inactifs')
+        },
+      })
+    } catch (e) {
+      message.error(
+        getApiErrorMessage(
+          e,
+          'Impossible de charger la liste des comptes inactifs',
+        ),
+      )
+    } finally {
+      setActivateAllInactiveLoading(false)
+    }
+  }, [fetchAllInactiveEmployeeIds, message, modal])
 
   function confirmDeactivate(row: EmployeeUser) {
     modal.confirm({
@@ -336,10 +500,16 @@ export function EmployeesPage() {
     value: d.id,
   }))
 
-  const selectedRows = useMemo(
-    () => dataSource.filter((r) => selectedRowKeys.includes(r.id)),
-    [dataSource, selectedRowKeys],
-  )
+  const selectedRows = useMemo(() => {
+    return selectedRowKeys
+      .map((k) => {
+        const id = String(k)
+        return (
+          selectedEmployeesById[id] ?? dataSource.find((r) => r.id === id)
+        )
+      })
+      .filter((r): r is EmployeeUser => r != null)
+  }, [selectedRowKeys, selectedEmployeesById, dataSource])
   const activateTargets = useMemo(
     () => selectedRows.filter((r) => !r.isActive && r.role === 'EMPLOYEE'),
     [selectedRows],
@@ -350,10 +520,66 @@ export function EmployeesPage() {
     [selectedRows],
   )
 
+  const bulkDepartTargets = useMemo(() => {
+    return selectedRows.filter((r) => {
+      if (r.role !== 'EMPLOYEE') {
+        return false
+      }
+      const s =
+        r.employmentStatus ?? (r.isActive ? 'ACTIVE' : 'PENDING')
+      return s === 'ACTIVE' || s === 'ON_NOTICE' || s === 'PENDING'
+    })
+  }, [selectedRows])
+
+  const handleArchiveDeparted = useCallback(
+    (row: EmployeeUser) => {
+      modal.confirm({
+        title: 'Archiver ce collaborateur ?',
+        content:
+          'Le compte sera marqué archivé et ne pourra plus être réintégré. Les bulletins restent conservés.',
+        okText: 'Archiver',
+        okButtonProps: { danger: true },
+        onOk: async () => {
+          try {
+            await employeesApi.archiveDepartedUser(row.id)
+            message.success('Collaborateur archivé')
+            await loadEmployees()
+            if (viewMode === 'kanban') {
+              void loadKanbanData()
+            }
+          } catch (e) {
+            message.error(getApiErrorMessage(e, 'Archivage impossible'))
+            throw e
+          }
+        },
+      })
+    },
+    [loadEmployees, loadKanbanData, message, modal, viewMode],
+  )
+
   const rowSelection = useMemo(
     () => ({
       selectedRowKeys,
-      onChange: (keys: React.Key[]) => setSelectedRowKeys(keys),
+      preserveSelectedRowKeys: true,
+      onChange: (
+        keys: React.Key[],
+        rows: EmployeeUser[],
+      ) => {
+        setSelectedRowKeys(keys)
+        const keySet = new Set(keys.map(String))
+        setSelectedEmployeesById((prev) => {
+          const next: Record<string, EmployeeUser> = {}
+          for (const id of Object.keys(prev)) {
+            if (keySet.has(id)) {
+              next[id] = prev[id]!
+            }
+          }
+          for (const row of rows) {
+            next[row.id] = row
+          }
+          return next
+        })
+      },
       selections: [Table.SELECTION_ALL, Table.SELECTION_INVERT],
     }),
     [selectedRowKeys],
@@ -376,6 +602,7 @@ export function EmployeesPage() {
   const handleBulkFinished = useCallback(() => {
     closeBulkModal()
     setSelectedRowKeys([])
+    setSelectedEmployeesById({})
     void loadEmployees()
     if (viewMode === 'kanban') {
       void loadKanbanData()
@@ -391,7 +618,7 @@ export function EmployeesPage() {
               variant="outlined"
               color="default"
               icon={<UploadOutlined />}
-              onClick={() => navigate('/employees/import')}
+              onClick={() => navigate(`${ADMIN_BASE}/employees/import`)}
             >
               Importer
             </Button>
@@ -401,58 +628,122 @@ export function EmployeesPage() {
               onClick={openCreateModal}
               className="employees-btn-primary-teal"
             >
-              + Ajouter
+              Ajouter
             </Button>
           </Space>
         }
       />
 
-      <div className="employees-filters">
-        <Input.Search
-          allowClear
-          className="employees-search"
-          placeholder="Rechercher par nom, prénom ou matricule..."
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-        />
-        <Select
-          allowClear
-          className="employees-filter-select"
-          placeholder="Département"
-          value={departmentIdFilter}
-          onChange={(v) => setDepartmentIdFilter(v)}
-          options={departmentOptions}
-          popupMatchSelectWidth={false}
-        />
-        <Select
-          className="employees-filter-select"
-          value={activationFilter}
-          onChange={(v) => setActivationFilter(v)}
-          options={[
-            { value: 'all', label: 'Statut : tous' },
-            { value: 'active', label: 'Statut : actifs' },
-            { value: 'inactive', label: 'Statut : inactifs' },
-            {
-              value: 'pending_password',
-              label: 'Statut : MDP à changer',
-            },
-          ]}
-          popupMatchSelectWidth={false}
-        />
-        <Typography.Link
-          className="employees-template-link"
-          onClick={() => void handleDownloadTemplate()}
-        >
-          Modèle d’import
-        </Typography.Link>
-        <Tag className="employees-total-tag">
-          {viewMode === 'kanban' ? kanbanTotal : total} collaborateurs
-        </Tag>
-      </div>
+      <p className="employees-page-lead">
+        Recherche, filtres et actions groupées — basculez entre la liste détaillée
+        et la vue par département.
+      </p>
+
+      <section className="employees-toolbar" aria-label="Filtres et recherche">
+        <div className="employees-toolbar__search-row">
+          <Input.Search
+            allowClear
+            className="employees-search"
+            placeholder="Rechercher par nom, prénom ou matricule..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+          <Tag className="employees-total-tag">
+            {viewMode === 'kanban' ? kanbanTotal : total} collaborateurs
+          </Tag>
+        </div>
+        <div className="employees-toolbar__selects">
+          <Select
+            allowClear
+            className="employees-filter-select"
+            placeholder="Département"
+            value={departmentIdFilter}
+            onChange={(v) => setDepartmentIdFilter(v)}
+            options={departmentOptions}
+            popupMatchSelectWidth={false}
+          />
+          <Select
+            className="employees-filter-select"
+            value={activationFilter}
+            onChange={(v) => setActivationFilter(v)}
+            options={[
+              { value: 'all', label: 'Statut : tous' },
+              { value: 'active', label: 'Statut : actifs' },
+              { value: 'inactive', label: 'Statut : inactifs' },
+              {
+                value: 'pending_password',
+                label: 'Statut : MDP à changer',
+              },
+            ]}
+            popupMatchSelectWidth={false}
+          />
+          <Select
+            className="employees-filter-select"
+            value={employmentFilter}
+            onChange={(v) => setEmploymentFilter(v)}
+            options={[
+              { value: 'all', label: 'Cycle de vie : tous' },
+              { value: 'active', label: 'Cycle : actifs / préavis' },
+              { value: 'on_notice', label: 'Cycle : en préavis' },
+              { value: 'departed', label: 'Cycle : sortis' },
+              { value: 'pending', label: 'Cycle : en attente' },
+              { value: 'archived', label: 'Cycle : archivés' },
+            ]}
+            popupMatchSelectWidth={false}
+          />
+          <Select
+            className="employees-filter-select"
+            value={contractTypeFilter}
+            onChange={(v) => setContractTypeFilter(v)}
+            options={[
+              { value: 'all', label: 'Contrat : tous' },
+              { value: 'CDI', label: 'CDI' },
+              { value: 'CDD', label: 'CDD' },
+              { value: 'INTERIM', label: 'Intérim' },
+              { value: 'STAGE', label: 'Stage' },
+            ]}
+            popupMatchSelectWidth={false}
+          />
+        </div>
+        <div className="employees-toolbar__options">
+          <div className="employees-toolbar__checkboxes">
+            <Checkbox
+              checked={expiringContractsOnly}
+              onChange={(e) => setExpiringContractsOnly(e.target.checked)}
+            >
+              Contrats à échéance (30 j.)
+            </Checkbox>
+            <Checkbox
+              checked={showContractColumn}
+              onChange={(e) => setShowContractColumn(e.target.checked)}
+            >
+              Colonne contrat
+            </Checkbox>
+          </div>
+          <div className="employees-toolbar__actions">
+            <Typography.Link
+              className="employees-template-link"
+              onClick={() => void handleDownloadTemplate()}
+            >
+              Modèle d’import
+            </Typography.Link>
+            <Button
+              type="default"
+              size="small"
+              icon={<ThunderboltOutlined />}
+              loading={activateAllInactiveLoading}
+              onClick={() => void handleActivateAllInactive()}
+              className="employees-activate-all-inactive-btn"
+            >
+              Activer tous les inactifs
+            </Button>
+          </div>
+        </div>
+      </section>
 
       {viewMode === 'table' && selectedRowKeys.length > 0 ? (
         <div className="employees-bulk-bar">
-          <Text type="secondary" style={{ marginRight: 8 }}>
+          <Text type="secondary" className="employees-bulk-bar__label">
             {selectedRowKeys.length} sélectionné(s)
           </Text>
           <Button
@@ -480,26 +771,36 @@ export function EmployeesPage() {
           >
             Renvoyer les invitations ({resendTargets.length})
           </Button>
-          <Button type="link" onClick={() => setSelectedRowKeys([])}>
+          <Button
+            type="primary"
+            danger
+            icon={<UserDeleteOutlined />}
+            disabled={bulkDepartTargets.length === 0}
+            onClick={() => setBulkDepartOpen(true)}
+          >
+            Enregistrer un départ ({bulkDepartTargets.length})
+          </Button>
+          <Button
+            type="link"
+            onClick={() => {
+              setSelectedRowKeys([])
+              setSelectedEmployeesById({})
+            }}
+          >
             Effacer la sélection
           </Button>
         </div>
       ) : null}
 
-      <div className="employees-view-toggle-wrap">
+      <div className="employees-view-panel">
+        <span className="employees-view-panel__label">Affichage</span>
         <Segmented<EmployeesViewMode>
           value={viewMode}
           onChange={setViewMode}
           options={[
             {
               label: (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}
-                >
+                <span className="employees-segment-label">
                   <TableOutlined />
                   Liste
                 </span>
@@ -508,13 +809,7 @@ export function EmployeesPage() {
             },
             {
               label: (
-                <span
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}
-                >
+                <span className="employees-segment-label">
                   <PartitionOutlined />
                   Kanban
                 </span>
@@ -530,6 +825,7 @@ export function EmployeesPage() {
         <EmployeeTable
           dataSource={dataSource}
           loading={listLoading}
+          showContractColumn={showContractColumn}
           rowSelection={rowSelection}
           pagination={{
             current: page,
@@ -562,6 +858,9 @@ export function EmployeesPage() {
           onResendInvitation={(row) =>
             openBulkModal([row.id], 'Renvoyer l’invitation')
           }
+          onDepart={(row) => setDepartureUser(row)}
+          onReinstate={(row) => setReinstateUser(row)}
+          onArchive={(row) => handleArchiveDeparted(row)}
         />
       ) : (
         <EmployeeKanban
@@ -624,6 +923,49 @@ export function EmployeesPage() {
           onFinished={handleBulkFinished}
         />
       </Modal>
+
+      {departureUser ? (
+        <DepartureModal
+          user={departureUser}
+          visible={Boolean(departureUser)}
+          onClose={() => setDepartureUser(null)}
+          onSuccess={() => {
+            void loadEmployees()
+            if (viewMode === 'kanban') {
+              void loadKanbanData()
+            }
+          }}
+        />
+      ) : null}
+
+      <BulkDepartureModal
+        open={bulkDepartOpen}
+        employees={bulkDepartTargets}
+        onClose={() => setBulkDepartOpen(false)}
+        onSuccess={() => {
+          setBulkDepartOpen(false)
+          setSelectedRowKeys([])
+          setSelectedEmployeesById({})
+          void loadEmployees()
+          if (viewMode === 'kanban') {
+            void loadKanbanData()
+          }
+        }}
+      />
+
+      {reinstateUser ? (
+        <ReinstateModal
+          user={reinstateUser}
+          open={Boolean(reinstateUser)}
+          onClose={() => setReinstateUser(null)}
+          onSuccess={() => {
+            void loadEmployees()
+            if (viewMode === 'kanban') {
+              void loadKanbanData()
+            }
+          }}
+        />
+      ) : null}
     </div>
   )
 }

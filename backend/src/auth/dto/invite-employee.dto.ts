@@ -1,6 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ContractType } from '@prisma/client';
 import {
+  IsDateString,
   IsEmail,
+  IsEnum,
   IsOptional,
   IsString,
   IsUUID,
@@ -48,4 +51,21 @@ export class InviteEmployeeDto {
   @IsOptional()
   @IsUUID('4')
   serviceId?: string;
+
+  @ApiPropertyOptional({ enum: ContractType })
+  @IsOptional()
+  @IsEnum(ContractType)
+  contractType?: ContractType;
+
+  @ApiPropertyOptional({
+    description: 'Date de fin de contrat (ISO) — recommandée pour CDD, Intérim, Stage',
+  })
+  @IsOptional()
+  @IsDateString()
+  contractEndDate?: string;
+
+  @ApiPropertyOptional({ description: "Date d'entrée dans l'entreprise (ISO)" })
+  @IsOptional()
+  @IsDateString()
+  entryDate?: string;
 }

@@ -69,6 +69,9 @@ function suggestionsToMapping(
     service: sug.service,
     poste: sug.poste,
     nomComplet: sug.nomComplet,
+    contractType: sug.contractType,
+    contractEndDate: sug.contractEndDate,
+    entryDate: sug.entryDate,
   }
 }
 
