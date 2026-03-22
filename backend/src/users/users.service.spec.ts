@@ -234,40 +234,41 @@ describe('UsersService', () => {
 
   describe('findOneForActor', () => {
     it('succès RH même entreprise', async () => {
-      prisma.user.findUnique.mockResolvedValue(publicUser);
+      prisma.user.findFirst.mockResolvedValue(publicUser);
       const u = await service.findOneForActor(rh, 'u1');
       expect(u.id).toBe('u1');
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: { id: 'u1', companyId: 'co-1' },
+        select: userPublicSelect,
+      });
+    });
+
+    it('RH autre entreprise → 404 (non exposé)', async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+      await expect(service.findOneForActor(rh, 'u1')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('EMPLOYEE autre id → 403', async () => {
+      await expect(
+        service.findOneForActor(employee, 'autre-id'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('EMPLOYEE son propre id → ok', async () => {
+      prisma.user.findFirst.mockResolvedValue(publicUser);
+      const u = await service.findOneForActor(employee, 'u1');
+      expect(u.id).toBe('u1');
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
         where: { id: 'u1' },
         select: userPublicSelect,
       });
     });
 
-    it('RH autre entreprise → 403', async () => {
-      prisma.user.findUnique.mockResolvedValue({
-        ...publicUser,
-        companyId: 'autre',
-      });
-      await expect(service.findOneForActor(rh, 'u1')).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
-    });
-
-    it('EMPLOYEE autre id → 403', async () => {
-      prisma.user.findUnique.mockResolvedValue(publicUser);
-      await expect(
-        service.findOneForActor(employee, 'autre-id'),
-      ).rejects.toBeInstanceOf(ForbiddenException);
-    });
-
-    it('EMPLOYEE son propre id → ok', async () => {
-      prisma.user.findUnique.mockResolvedValue(publicUser);
-      const u = await service.findOneForActor(employee, 'u1');
-      expect(u.id).toBe('u1');
-    });
-
     it('inconnu → 404', async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(null);
       await expect(service.findOneForActor(rh, 'x')).rejects.toBeInstanceOf(
         NotFoundException,
       );
@@ -276,14 +277,15 @@ describe('UsersService', () => {
 
   describe('updateForRhAdmin', () => {
     it('met à jour si même company', async () => {
-      prisma.user.findUnique.mockResolvedValue({
-        id: 'u1',
-        companyId: 'co-1',
-        passwordHash: 'x',
-        departmentId: null,
-        serviceId: null,
-      });
-      prisma.user.findFirst.mockResolvedValue(null);
+      prisma.user.findFirst
+        .mockResolvedValueOnce({
+          id: 'u1',
+          companyId: 'co-1',
+          passwordHash: 'x',
+          departmentId: null,
+          serviceId: null,
+        })
+        .mockResolvedValue(null);
       prisma.user.update.mockResolvedValue({ ...publicUser, firstName: 'Z' });
 
       const out = await service.updateForRhAdmin(rh, 'u1', { firstName: 'Z' });
@@ -291,24 +293,22 @@ describe('UsersService', () => {
       expect(prisma.user.update).toHaveBeenCalled();
     });
 
-    it('mauvaise company → 403', async () => {
-      prisma.user.findUnique.mockResolvedValue({
-        id: 'u1',
-        companyId: 'autre',
-      });
+    it('mauvaise company → 404', async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
       await expect(
         service.updateForRhAdmin(rh, 'u1', { firstName: 'Z' }),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('email déjà pris → 409', async () => {
-      prisma.user.findUnique.mockResolvedValue({
-        id: 'u1',
-        companyId: 'co-1',
-        departmentId: null,
-        serviceId: null,
-      });
-      prisma.user.findFirst.mockResolvedValue({ id: 'other' });
+      prisma.user.findFirst
+        .mockResolvedValueOnce({
+          id: 'u1',
+          companyId: 'co-1',
+          departmentId: null,
+          serviceId: null,
+        })
+        .mockResolvedValueOnce({ id: 'other' });
       await expect(
         service.updateForRhAdmin(rh, 'u1', { email: 'taken@b.com' }),
       ).rejects.toBeInstanceOf(ConflictException);
@@ -317,9 +317,10 @@ describe('UsersService', () => {
 
   describe('deactivate / reactivate', () => {
     it('deactivate : audit + isActive false', async () => {
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         id: 'u2',
         companyId: 'co-1',
+        employmentStatus: 'ACTIVE',
       });
       prisma.user.update.mockResolvedValue({
         ...publicUser,
@@ -346,9 +347,10 @@ describe('UsersService', () => {
     });
 
     it('deactivate soi-même → 400', async () => {
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         id: rh.id,
         companyId: 'co-1',
+        employmentStatus: 'ACTIVE',
       });
       await expect(
         service.deactivateForRhAdmin(rh, rh.id),
@@ -356,9 +358,10 @@ describe('UsersService', () => {
     });
 
     it('reactivate : audit + isActive true', async () => {
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         id: 'u2',
         companyId: 'co-1',
+        employmentStatus: 'ACTIVE',
       });
       prisma.user.update.mockResolvedValue({
         ...publicUser,
@@ -500,9 +503,17 @@ describe('UsersService', () => {
         },
       );
 
-      prisma.user.findUnique.mockImplementation(
-        (args: { where: { id?: string; email?: string } }) => {
-          if (args.where.id === 'emp-1') {
+      prisma.user.findFirst.mockImplementation(
+        (args: {
+          where: {
+            id?: string;
+            companyId?: string;
+            email?: string;
+            NOT?: { id: string };
+          };
+        }) => {
+          const w = args.where;
+          if (w.id === 'emp-1' && w.companyId === 'co-1') {
             return Promise.resolve({
               id: 'emp-1',
               companyId: 'co-1',
@@ -520,7 +531,10 @@ describe('UsersService', () => {
               createdAt: new Date(),
             });
           }
-          if (args.where.email === 'new@m.com') {
+          if (
+            w.email === 'new@m.com' &&
+            w.NOT?.id === 'emp-1'
+          ) {
             return Promise.resolve(null);
           }
           return Promise.resolve(null);

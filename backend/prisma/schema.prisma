@@ -43,18 +43,26 @@ model Company {
   name             String
   /// RCCM (Côte d’Ivoire) ; colonne SQL `siret` (historique).
   rccm             String?   @map("siret")
+  phone            String?   @map("phone")
   address          String?
   logoUrl          String?   @map("logo_url")
   subscriptionPlan String?   @map("subscription_plan")
+  /// Compte entreprise actif (désactivation SaaS : impayé, résiliation).
+  isActive         Boolean   @default(true) @map("is_active")
   /// Jours d’accès lecture seule après départ (mobile), défaut 90.
   readOnlyDaysAfterDeparture Int @default(90) @map("read_only_days_after_departure")
+  /// Exiger l’accusé de réception électronique sur les bulletins (app mobile).
+  requireSignature Boolean   @default(false) @map("require_signature")
   createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   users       User[]
   payslips    Payslip[]
   directions  Direction[]
   departments Department[]
   services    Service[]
+  auditLogs   AuditLog[]
+  payslipSignatures PayslipSignature[]
 }
 
 model Direction {
@@ -153,6 +161,7 @@ model User {
   auditLogs          AuditLog[]
   notifications      Notification[]
   sessions           Session[]
+  payslipSignatures  PayslipSignature[]
 
   @@unique([companyId, employeeId], name: "user_company_matricule")
   @@index([companyId])
@@ -177,15 +186,47 @@ model Payslip {
   uploadedAt   DateTime @default(now()) @map("uploaded_at")
   isRead       Boolean  @default(false) @map("is_read")
   readAt       DateTime? @map("read_at")
+  isSigned     Boolean  @default(false) @map("is_signed")
+  signedAt     DateTime? @map("signed_at")
+  signature    PayslipSignature?
 
   @@unique([userId, periodMonth, periodYear], name: "payslip_user_period")
   @@index([companyId, periodYear, periodMonth])
+}
+
+model PayslipSignature {
+  id               String   @id @default(uuid())
+  payslipId        String   @unique @map("payslip_id")
+  payslip          Payslip  @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  userId           String   @map("user_id")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employeeId       String?  @map("employee_id")
+  fullName         String   @map("full_name")
+  fileHash         String   @map("file_hash")
+  signedAt         DateTime @map("signed_at")
+  ipAddress        String?  @map("ip_address")
+  userAgent        String?  @map("user_agent")
+  deviceInfo       String?  @map("device_info")
+  verificationCode String   @unique @map("verification_code")
+  companyId        String   @map("company_id")
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  periodMonth      Int      @map("period_month")
+  periodYear       Int      @map("period_year")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([verificationCode])
+  @@index([companyId, periodYear, periodMonth])
+  @@map("payslip_signatures")
 }
 
 model AuditLog {
   id         String   @id @default(uuid())
   userId     String?  @map("user_id")
   user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  companyId  String?  @map("company_id")
+  company    Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
   action     String
   entityType String   @map("entity_type")
   entityId   String?  @map("entity_id")
@@ -195,6 +236,7 @@ model AuditLog {
   createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([userId])
+  @@index([companyId])
   @@index([createdAt])
 }
 

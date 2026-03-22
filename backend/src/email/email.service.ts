@@ -51,6 +51,64 @@ export class EmailService {
     return this.transporter != null;
   }
 
+  async sendWelcomeEmail(data: {
+    to: string;
+    firstName: string;
+    companyName: string;
+  }): Promise<void> {
+    const fn = escapeHtml(data.firstName);
+    const cn = escapeHtml(data.companyName);
+    const subject = `Bienvenue sur PaySlip Manager, ${fn} !`;
+    const dashboardUrl =
+      this.config.get<string>('ADMIN_WEB_URL')?.trim().replace(/\/$/, '') ??
+      '';
+    const ctaHref = dashboardUrl ? `${dashboardUrl}/dashboard` : '#';
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: #0F5C5E; border-radius: 12px 12px 0 0; padding: 24px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 22px;">PaySlip Manager</h1>
+        </div>
+        <div style="background: #F8F9FA; border: 1px solid #E8E8E8; border-radius: 0 0 12px 12px; padding: 24px;">
+          <p style="font-size: 16px; color: #1C2833;">Bonjour <strong>${fn}</strong>,</p>
+          <p style="font-size: 14px; color: #7F8C8D; line-height: 1.6;">
+            Votre espace <strong>${cn}</strong> est prêt sur PaySlip Manager.
+          </p>
+          <p style="font-size: 14px; color: #7F8C8D; line-height: 1.6;">
+            Voici les prochaines étapes :
+          </p>
+          <ol style="font-size: 14px; color: #7F8C8D; line-height: 1.8; padding-left: 20px;">
+            <li>Configurez votre organigramme (directions, départements, services)</li>
+            <li>Importez vos collaborateurs via un fichier Excel</li>
+            <li>Activez leurs comptes en un clic</li>
+            <li>Déposez vos bulletins de paie</li>
+          </ol>
+          <div style="text-align: center; margin-top: 24px;">
+            <a href="${ctaHref}" style="background: #F28C28; color: white; text-decoration: none; padding: 12px 32px; border-radius: 8px; font-size: 14px; font-weight: bold;">
+              Accéder à mon espace
+            </a>
+          </div>
+        </div>
+      </div>
+    `;
+
+    if (!this.transporter) {
+      this.logger.log(`[E-MAIL SIMULÉ] Bienvenue envoyé à ${data.to}`);
+      return;
+    }
+
+    const from =
+      this.config.get<string>('SMTP_FROM')?.trim() ||
+      'PaySlip Manager <noreply@payslip-manager.com>';
+
+    await this.transporter.sendMail({
+      from,
+      to: data.to,
+      subject,
+      html,
+    });
+  }
+
   async sendActivationEmail(data: ActivationEmailPayload): Promise<void> {
     const html = this.buildActivationHtml(data);
     const subject = `${data.companyName} — Votre espace PaySlip Manager est prêt`;

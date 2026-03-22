@@ -19,6 +19,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { EmailModule } from './email/email.module';
 import { StorageModule } from './storage/storage.module';
 import { UsersModule } from './users/users.module';
+import { SuperAdminModule } from './super-admin/super-admin.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { UsersModule } from './users/users.module';
     DashboardModule,
     NotificationsModule,
     HealthModule,
+    SuperAdminModule,
   ],
   controllers: [AppController],
   providers: [

@@ -11,7 +11,7 @@ import { AuthFormField } from '../../components/AuthFormField'
 import { useAuth } from '../../contexts/AuthContext'
 import { AuthLayout } from '../../layouts/AuthLayout'
 import { getApiErrorMessage } from '../../utils/apiErrorMessage'
-import { ADMIN_BASE } from '../../constants/adminRoutes'
+import { ADMIN_BASE, SUPER_ADMIN_BASE } from '../../constants/adminRoutes'
 import { safeReturnUrl } from './authReturnUrl'
 
 import './auth.css'
@@ -49,7 +49,7 @@ function LoginArgument({
 }
 
 export function LoginPage() {
-  const { login, isAuthenticated, isLoading } = useAuth()
+  const { login, isAuthenticated, isLoading, user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
@@ -91,9 +91,15 @@ export function LoginPage() {
       setError(null)
       setSubmitting(true)
       try {
-        await login(values.email.trim(), values.password)
+        const session = await login(values.email.trim(), values.password)
         failedAttempts.current = 0
-        navigate(returnTarget, { replace: true })
+        if (session.user.mustChangePassword) {
+          navigate('/password-required', { replace: true })
+        } else if (session.user.role === 'SUPER_ADMIN') {
+          navigate(SUPER_ADMIN_BASE, { replace: true })
+        } else {
+          navigate(returnTarget, { replace: true })
+        }
       } catch (e) {
         failedAttempts.current += 1
         if (failedAttempts.current >= MAX_ATTEMPTS) {
@@ -110,6 +116,19 @@ export function LoginPage() {
     [login, lockoutRemaining, navigate, returnTarget],
   )
 
+  const postAuthPath = (() => {
+    if (!user) {
+      return returnTarget
+    }
+    if (user.mustChangePassword) {
+      return '/password-required'
+    }
+    if (user.role === 'SUPER_ADMIN') {
+      return SUPER_ADMIN_BASE
+    }
+    return returnTarget
+  })()
+
   if (isLoading) {
     return (
       <div className="auth-page-loading">
@@ -121,7 +140,7 @@ export function LoginPage() {
   }
 
   if (isAuthenticated) {
-    return <Navigate to={returnTarget} replace />
+    return <Navigate to={postAuthPath} replace />
   }
 
   const leftContent = (
@@ -206,7 +225,7 @@ export function LoginPage() {
               type="warning"
               showIcon
               className="auth-login-alert"
-              message={`Trop de tentatives. Réessayez dans ${lockoutRemaining} seconde${lockoutRemaining > 1 ? 's' : ''}.`}
+              title={`Trop de tentatives. Réessayez dans ${lockoutRemaining} seconde${lockoutRemaining > 1 ? 's' : ''}.`}
             />
           ) : null}
 
@@ -215,7 +234,7 @@ export function LoginPage() {
               type="error"
               closable
               className="auth-login-alert"
-              message={error}
+              title={error}
               onClose={() => setError(null)}
             />
           ) : null}

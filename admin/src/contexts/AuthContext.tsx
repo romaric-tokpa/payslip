@@ -19,6 +19,7 @@ import {
   updateStoredTokens,
   updateStoredUser,
 } from '../services/authStorage'
+import { tryConsumeImpersonationHandoffFromUrl } from '../utils/impersonationHandoff'
 import * as authApi from '../services/auth.service'
 import {
   setLogoutHandler,
@@ -99,7 +100,7 @@ type AuthContextValue = {
   isAuthenticated: boolean
   accessToken: string | null
   refreshToken: string | null
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<AuthSessionPayload>
   /** Après inscription ou autre flux qui renvoie déjà les jetons. */
   signInWithPayload: (payload: AuthSessionPayload) => void
   logout: () => Promise<void>
@@ -150,6 +151,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     async function restoreSession() {
       dispatch({ type: 'SET_LOADING', payload: true })
+
+      const handoff = tryConsumeImpersonationHandoffFromUrl()
+      if (handoff) {
+        saveStoredSession({
+          user: handoff.user,
+          accessToken: handoff.accessToken,
+          refreshToken: handoff.refreshToken,
+        })
+        if (cancelled) {
+          return
+        }
+        dispatch({ type: 'LOGIN_SUCCESS', payload: handoff })
+        dispatch({ type: 'SET_LOADING', payload: false })
+        return
+      }
+
       const stored = loadStoredSession()
       if (cancelled) {
         return
@@ -198,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshToken: payload.refreshToken,
     })
     dispatch({ type: 'LOGIN_SUCCESS', payload })
+    return payload
   }, [])
 
   const signInWithPayload = useCallback((payload: AuthSessionPayload) => {

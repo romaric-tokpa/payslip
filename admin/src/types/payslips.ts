@@ -1,3 +1,9 @@
+export type PayslipSignatureSummary = {
+  id: string
+  verificationCode: string
+  signedAt: string
+}
+
 export type PayslipUserSummary = {
   firstName: string
   lastName: string
@@ -19,6 +25,9 @@ export type Payslip = {
   uploadedAt: string
   isRead: boolean
   readAt: string | null
+  isSigned: boolean
+  signedAt: string | null
+  signature?: PayslipSignatureSummary | null
   user: PayslipUserSummary
 }
 

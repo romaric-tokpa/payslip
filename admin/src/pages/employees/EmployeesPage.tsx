@@ -849,7 +849,9 @@ export function EmployeesPage() {
           onDeactivate={confirmDeactivate}
           onReactivate={(row) => void handleReactivate(row)}
           onViewPayslips={(userId) => {
-            navigate(`/payslips?userId=${encodeURIComponent(userId)}`)
+            navigate(
+              `${ADMIN_BASE}/payslips?userId=${encodeURIComponent(userId)}`,
+            )
           }}
           onRegenerateInvitation={(row) => handleRegenerateInvitation(row)}
           onActivateAndInvite={(row) =>
@@ -870,7 +872,9 @@ export function EmployeesPage() {
           onDeactivate={confirmDeactivate}
           onReactivate={(row) => void handleReactivate(row)}
           onViewPayslips={(userId) => {
-            navigate(`/payslips?userId=${encodeURIComponent(userId)}`)
+            navigate(
+              `${ADMIN_BASE}/payslips?userId=${encodeURIComponent(userId)}`,
+            )
           }}
           onRegenerateInvitation={(row) => handleRegenerateInvitation(row)}
         />

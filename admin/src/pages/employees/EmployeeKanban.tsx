@@ -79,7 +79,7 @@ export function EmployeeKanban({
         : []),
       {
         key: 'payslips',
-        label: 'Voir les bulletins',
+        label: 'Bulletins et signatures (par mois)',
         icon: <FileProtectOutlined />,
       },
     ]

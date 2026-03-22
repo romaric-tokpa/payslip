@@ -116,6 +116,7 @@ export class AuthController {
 
   @Public()
   @Post('register')
+  @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Inscription admin RH + création entreprise' })
   @ApiCreatedResponse({
     description: 'Compte et entreprise créés',
@@ -134,7 +135,9 @@ export class AuthController {
       },
     },
   })
-  @ApiConflictResponse({ description: 'E-mail déjà utilisé' })
+  @ApiConflictResponse({
+    description: 'E-mail ou nom d’entreprise déjà utilisé',
+  })
   @ApiBadRequestResponse({
     description: 'Validation des champs (ex. mot de passe < 8 caractères)',
   })

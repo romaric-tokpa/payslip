@@ -9,6 +9,11 @@ import type {
   PayslipDetail,
   QueryPayslipsParams,
 } from '../types/payslips'
+import type {
+  PayslipSignatureStatsResponse,
+  PayslipUnsignedRow,
+  VerifySignatureResponse,
+} from '../types/payslip-signatures'
 
 function payslipQueryToParams(
   p: QueryPayslipsParams,
@@ -135,4 +140,83 @@ export async function getPayslipById(id: string): Promise<PayslipDetail> {
 
 export async function deletePayslip(id: string): Promise<void> {
   await api.delete(`/payslips/${id}`)
+}
+
+export async function getPayslipSignatureStats(
+  month: number,
+  year: number,
+): Promise<PayslipSignatureStatsResponse> {
+  const { data } = await api.get<PayslipSignatureStatsResponse>(
+    '/payslips/signatures/stats',
+    { params: { month, year } },
+  )
+  return data
+}
+
+export async function getUnsignedPayslipsForPeriod(
+  month: number,
+  year: number,
+): Promise<PayslipUnsignedRow[]> {
+  const { data } = await api.get<PayslipUnsignedRow[]>(
+    '/payslips/signatures/unsigned',
+    { params: { month, year } },
+  )
+  return data
+}
+
+export async function remindPayslipSignatures(body: {
+  month: number
+  year: number
+  message?: string
+  userIds?: string[]
+}): Promise<{ reminded: number }> {
+  const { data } = await api.post<{ reminded: number }>(
+    '/payslips/signatures/remind',
+    body,
+  )
+  return data
+}
+
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+export async function downloadSignatureCertificate(
+  signatureId: string,
+): Promise<void> {
+  const res = await api.get<Blob>(
+    `/payslips/signatures/${signatureId}/certificate`,
+    { responseType: 'blob' },
+  )
+  triggerDownload(res.data, 'certificat-signature.pdf')
+}
+
+export async function downloadSignatureComplianceReport(
+  month: number,
+  year: number,
+): Promise<void> {
+  const res = await api.get<Blob>('/payslips/signatures/export', {
+    params: { month, year },
+    responseType: 'blob',
+  })
+  const fn = `rapport-signatures-${year}-${String(month).padStart(2, '0')}.csv`
+  triggerDownload(res.data, fn)
+}
+
+export async function verifyPayslipSignaturePublic(
+  code: string,
+): Promise<VerifySignatureResponse> {
+  const c = code.trim().toUpperCase()
+  const { data } = await api.get<VerifySignatureResponse>(
+    `/payslips/signatures/verify/${encodeURIComponent(c)}`,
+  )
+  return data
 }

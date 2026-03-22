@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiForbiddenResponse,
@@ -13,6 +13,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { DashboardService } from './dashboard.service';
 import { DashboardStatsResponseDto } from './dto/dashboard-stats.dto';
+import { RemindUnreadResponseDto } from './dto/enhanced-dashboard.dto';
 
 @ApiTags('Dashboard')
 @ApiBearerAuth()
@@ -32,5 +33,20 @@ export class DashboardController {
   @ApiUnauthorizedResponse()
   async getStats(@CurrentUser() actor: RequestUser) {
     return this.dashboard.getStats(actor);
+  }
+
+  @Post('remind-unread')
+  @HttpCode(HttpStatus.OK)
+  @Roles('RH_ADMIN')
+  @ApiOperation({
+    summary: 'Relancer les collaborateurs sans consultation (mois courant)',
+    description:
+      'Crée une notification in-app par personne concernée (bulletin du mois civil UTC non lu).',
+  })
+  @ApiOkResponse({ type: RemindUnreadResponseDto })
+  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse()
+  async remindUnread(@CurrentUser() actor: RequestUser) {
+    return this.dashboard.remindUnreadCurrentMonth(actor);
   }
 }

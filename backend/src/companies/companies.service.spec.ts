@@ -55,7 +55,14 @@ describe('CompaniesService', () => {
     prisma.company.update.mockResolvedValue({});
     users.getMe.mockResolvedValue({
       user: { id: rh.id },
-      company: { id: 'co-1', name: 'New', rccm: null, address: null },
+      company: {
+        id: 'co-1',
+        name: 'New',
+        rccm: null,
+        phone: null,
+        address: null,
+        requireSignature: false,
+      },
     });
 
     const out = await service.updateMyCompany(rh, { name: 'New' });

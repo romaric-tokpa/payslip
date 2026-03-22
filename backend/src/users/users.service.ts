@@ -95,7 +95,9 @@ export type CompanyBrief = {
   id: string;
   name: string;
   rccm: string | null;
+  phone: string | null;
   address: string | null;
+  requireSignature: boolean;
 };
 
 export type MeResponse = {
@@ -213,7 +215,9 @@ export class UsersService {
           id: true,
           name: true,
           rccm: true,
+          phone: true,
           address: true,
+          requireSignature: true,
         },
       });
     }
@@ -415,29 +419,42 @@ export class UsersService {
     actor: RequestUser,
     id: string,
   ): Promise<UserPublicClient> {
-    const user = await this.prisma.user.findUnique({
-      where: { id },
-      select: userPublicSelect,
-    });
-    if (!user) {
-      throw new NotFoundException('Utilisateur introuvable');
-    }
-
     if (actor.role === 'EMPLOYEE') {
       if (actor.id !== id) {
         throw new ForbiddenException();
+      }
+      const user = await this.prisma.user.findFirst({
+        where: { id },
+        select: userPublicSelect,
+      });
+      if (!user) {
+        throw new NotFoundException('Utilisateur introuvable');
       }
       return this.toPublicClient(user);
     }
 
     if (actor.role === 'RH_ADMIN') {
-      if (!actor.companyId || user.companyId !== actor.companyId) {
-        throw new ForbiddenException();
+      if (!actor.companyId) {
+        throw new ForbiddenException('Compte sans entreprise associée');
+      }
+      const user = await this.prisma.user.findFirst({
+        where: { id, companyId: actor.companyId },
+        select: userPublicSelect,
+      });
+      if (!user) {
+        throw new NotFoundException('Utilisateur introuvable');
       }
       return this.toPublicClient(user);
     }
 
     if (actor.role === 'SUPER_ADMIN') {
+      const user = await this.prisma.user.findUnique({
+        where: { id },
+        select: userPublicSelect,
+      });
+      if (!user) {
+        throw new NotFoundException('Utilisateur introuvable');
+      }
       return this.toPublicClient(user);
     }
 
@@ -451,12 +468,11 @@ export class UsersService {
   ): Promise<UserPublicClient> {
     this.assertRhAdminWithCompany(actor);
 
-    const existing = await this.prisma.user.findUnique({ where: { id } });
+    const existing = await this.prisma.user.findFirst({
+      where: { id, companyId: actor.companyId! },
+    });
     if (!existing) {
       throw new NotFoundException('Utilisateur introuvable');
-    }
-    if (existing.companyId !== actor.companyId) {
-      throw new ForbiddenException();
     }
 
     const resolvedDepartmentId =
@@ -551,12 +567,11 @@ export class UsersService {
       );
     }
 
-    const existing = await this.prisma.user.findUnique({ where: { id } });
+    const existing = await this.prisma.user.findFirst({
+      where: { id, companyId: actor.companyId! },
+    });
     if (!existing) {
       throw new NotFoundException('Utilisateur introuvable');
-    }
-    if (existing.companyId !== actor.companyId) {
-      throw new ForbiddenException();
     }
     if (
       existing.employmentStatus === 'DEPARTED' ||
@@ -576,6 +591,7 @@ export class UsersService {
     await this.prisma.auditLog.create({
       data: {
         userId: actor.id,
+        companyId: actor.companyId!,
         action: USER_AUDIT.DEACTIVATED,
         entityType: 'User',
         entityId: id,
@@ -591,12 +607,11 @@ export class UsersService {
   ): Promise<UserPublicClient> {
     this.assertRhAdminWithCompany(actor);
 
-    const existing = await this.prisma.user.findUnique({ where: { id } });
+    const existing = await this.prisma.user.findFirst({
+      where: { id, companyId: actor.companyId! },
+    });
     if (!existing) {
       throw new NotFoundException('Utilisateur introuvable');
-    }
-    if (existing.companyId !== actor.companyId) {
-      throw new ForbiddenException();
     }
     if (
       existing.employmentStatus === 'DEPARTED' ||
@@ -616,6 +631,7 @@ export class UsersService {
     await this.prisma.auditLog.create({
       data: {
         userId: actor.id,
+        companyId: actor.companyId!,
         action: USER_AUDIT.REACTIVATED,
         entityType: 'User',
         entityId: id,
@@ -1827,8 +1843,11 @@ export class UsersService {
                 },
                 adminUser,
               );
-              const created = await this.prisma.user.findUnique({
-                where: { email: c.row.email.toLowerCase() },
+              const created = await this.prisma.user.findFirst({
+                where: {
+                  email: c.row.email.toLowerCase(),
+                  companyId,
+                },
                 select: { id: true },
               });
               setDetail({
@@ -2303,6 +2322,7 @@ export class UsersService {
     await this.prisma.auditLog.create({
       data: {
         userId: actor.id,
+        companyId,
         action: USER_AUDIT.BULK_ACTIVATE,
         entityType: 'User',
         entityId: companyId,

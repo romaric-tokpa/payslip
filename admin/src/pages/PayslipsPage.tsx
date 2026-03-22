@@ -1,29 +1,37 @@
 import {
+  CheckCircleOutlined,
+  CloseCircleOutlined,
   DeleteOutlined,
+  DownloadOutlined,
   EyeOutlined,
   PartitionOutlined,
   TableOutlined,
   UploadOutlined,
 } from '@ant-design/icons'
 import {
+  Alert,
   App,
   Avatar,
   Button,
   Collapse,
+  Input,
+  Modal,
   Segmented,
   Select,
   Space,
   Table,
   Tag,
+  Typography,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ADMIN_BASE } from '../constants/adminRoutes'
 import * as employeesApi from '../services/employees.service'
 import * as payslipsApi from '../services/payslips.service'
 import type { EmployeeUser } from '../types/employees'
+import type { VerifySignatureResponse } from '../types/payslip-signatures'
 import type { Payslip } from '../types/payslips'
 import { PageHeader } from '../components/PageHeader'
 import { getApiErrorMessage } from '../utils/apiErrorMessage'
@@ -34,9 +42,11 @@ import {
 } from './payslips/payslipUploadConstants'
 import './employees/employees.css'
 import './payslips/payslips-list.css'
+import { PayslipSignaturesSection } from './payslips/PayslipSignaturesSection'
 import { PayslipsKanban } from './payslips/PayslipsKanban'
 
 type PayslipsViewMode = 'list' | 'kanban'
+type PayslipsMainTab = 'bulletins' | 'signatures'
 
 /** Taille de page API pour tout charger avant regroupement par mois de paie. */
 const FETCH_PAGE_SIZE = 100
@@ -81,6 +91,7 @@ const MONTH_OPTIONS = MONTHS_FR.map((label, i) => ({
 export function PayslipsPage() {
   const { message, modal } = App.useApp()
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const filterUserId = searchParams.get('userId') || undefined
 
@@ -105,6 +116,20 @@ export function PayslipsPage() {
 
   const [openingId, setOpeningId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<PayslipsViewMode>('list')
+  const [mainTab, setMainTab] = useState<PayslipsMainTab>('bulletins')
+
+  const [sigVerifyOpen, setSigVerifyOpen] = useState(false)
+  const [sigVerifyCode, setSigVerifyCode] = useState('')
+  const [sigVerifyLoading, setSigVerifyLoading] = useState(false)
+  const [sigVerifyResult, setSigVerifyResult] =
+    useState<VerifySignatureResponse | null>(null)
+
+  useEffect(() => {
+    const st = location.state as { tab?: string } | undefined
+    if (st?.tab === 'signatures') {
+      setMainTab('signatures')
+    }
+  }, [location.state])
 
   function setUserIdFilter(next: string | undefined) {
     setSearchParams(
@@ -297,6 +322,51 @@ export function PayslipsPage() {
     [message],
   )
 
+  const openSigVerify = useCallback((code: string) => {
+    setSigVerifyCode(code.replace(/\s/g, '').toUpperCase())
+    setSigVerifyResult(null)
+    setSigVerifyOpen(true)
+  }, [])
+
+  const closeSigVerify = useCallback(() => {
+    setSigVerifyOpen(false)
+    setSigVerifyResult(null)
+    setSigVerifyCode('')
+  }, [])
+
+  const runSigVerify = useCallback(async () => {
+    const c = sigVerifyCode.replace(/\s/g, '').toUpperCase()
+    if (c.length < 12) {
+      message.warning('Saisissez le code sur 12 caractères (0-9, A-F).')
+      return
+    }
+    setSigVerifyLoading(true)
+    setSigVerifyResult(null)
+    try {
+      const data = await payslipsApi.verifyPayslipSignaturePublic(c)
+      setSigVerifyResult(data)
+      if (!data.valid) {
+        message.info('Code de vérification non trouvé.')
+      }
+    } catch (e) {
+      message.error(getApiErrorMessage(e, 'Vérification impossible'))
+    } finally {
+      setSigVerifyLoading(false)
+    }
+  }, [sigVerifyCode, message])
+
+  const downloadSignatureCert = useCallback(
+    async (signatureId: string) => {
+      try {
+        await payslipsApi.downloadSignatureCertificate(signatureId)
+        message.success('Certificat téléchargé')
+      } catch (e) {
+        message.error(getApiErrorMessage(e, 'Téléchargement impossible'))
+      }
+    },
+    [message],
+  )
+
   const confirmDelete = useCallback(
     (row: Payslip) => {
       modal.confirm({
@@ -364,6 +434,13 @@ export function PayslipsPage() {
         render: (_, row) => row.user.department?.trim() || '—',
       },
       {
+        title: 'Période',
+        key: 'period',
+        width: 88,
+        render: (_, row) =>
+          `${String(row.periodMonth).padStart(2, '0')}/${row.periodYear}`,
+      },
+      {
         title: 'Taille',
         key: 'size',
         width: 90,
@@ -389,12 +466,40 @@ export function PayslipsPage() {
           ),
       },
       {
+        title: 'Signé',
+        key: 'signed',
+        width: 88,
+        align: 'center',
+        render: (_, row) =>
+          row.isSigned ? (
+            <Tag color="success">Oui</Tag>
+          ) : (
+            <Tag>Non</Tag>
+          ),
+      },
+      {
+        title: 'Code accusé',
+        key: 'sigCode',
+        width: 156,
+        render: (_, row) =>
+          row.signature ? (
+            <Typography.Text
+              copyable={{ text: row.signature.verificationCode }}
+              style={{ fontFamily: 'monospace', fontSize: 12 }}
+            >
+              {row.signature.verificationCode}
+            </Typography.Text>
+          ) : (
+            <span style={{ color: '#bfbfbf' }}>—</span>
+          ),
+      },
+      {
         title: 'Actions',
         key: 'actions',
-        width: 140,
+        width: 260,
         fixed: 'right',
         render: (_, row) => (
-          <Space size="small">
+          <Space size="small" wrap>
             <Button
               type="link"
               size="small"
@@ -409,6 +514,27 @@ export function PayslipsPage() {
             <Button
               type="link"
               size="small"
+              disabled={!row.signature?.verificationCode}
+              onClick={() =>
+                openSigVerify(row.signature?.verificationCode ?? '')
+              }
+            >
+              Vérifier
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              icon={<DownloadOutlined />}
+              disabled={!row.signature?.id}
+              onClick={() =>
+                void downloadSignatureCert(row.signature!.id)
+              }
+            >
+              Certificat
+            </Button>
+            <Button
+              type="link"
+              size="small"
               danger
               icon={<DeleteOutlined />}
               onClick={() => confirmDelete(row)}
@@ -419,7 +545,13 @@ export function PayslipsPage() {
         ),
       },
     ],
-    [openingId, openPdf, confirmDelete],
+    [
+      openingId,
+      openPdf,
+      confirmDelete,
+      openSigVerify,
+      downloadSignatureCert,
+    ],
   )
 
   const collapseItems = useMemo(
@@ -442,7 +574,7 @@ export function PayslipsPage() {
             dataSource={g.rows}
             loading={false}
             pagination={false}
-            scroll={{ x: 880 }}
+            scroll={{ x: 1120 }}
             size="middle"
           />
         ),
@@ -468,10 +600,51 @@ export function PayslipsPage() {
       />
 
       <p className="payslips-page-lead">
-        Filtrez par période ou par personne, consultez les PDF et suivez la lecture
-        côté collaborateur — en liste par mois ou en colonnes Kanban.
+        Chaque bulletin correspond à <strong>un mois</strong> pour{' '}
+        <strong>un collaborateur</strong> : après signature sur l’app, un{' '}
+        <strong>code de vérification</strong> unique est attaché à ce couple
+        mois / personne. Filtrez par période ou par collaborateur, copiez le code,
+        vérifiez depuis cette page ou la page publique <strong>/verify</strong>, et
+        téléchargez le certificat PDF. Vue globale des signatures dans l’onglet
+        dédié.
       </p>
 
+      <div className="employees-view-panel payslips-main-tab-panel">
+        <span className="employees-view-panel__label">Vue</span>
+        <Segmented<PayslipsMainTab>
+          value={mainTab}
+          onChange={setMainTab}
+          options={[
+            { label: 'Bulletins', value: 'bulletins' },
+            { label: 'Signatures', value: 'signatures' },
+          ]}
+          className="employees-view-toggle"
+        />
+      </div>
+
+      {mainTab === 'signatures' ? (
+        <PayslipSignaturesSection />
+      ) : null}
+
+      {mainTab === 'bulletins' ? (
+        <>
+      {filterUserId ? (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message="Vue par collaborateur"
+          description={
+            <>
+              Chaque ligne est un <strong>mois de paie</strong> pour cette
+              personne. Le code d’accusé permet de contrôler la signature
+              enregistrée pour ce mois précis. Utilisez <strong>Vérifier</strong>{' '}
+              pour interroger le registre (équivalent à la page publique de
+              vérification).
+            </>
+          }
+        />
+      ) : null}
       <section className="payslips-toolbar" aria-label="Filtres bulletins">
         <div className="payslips-toolbar__filters">
           <Select
@@ -562,6 +735,14 @@ export function PayslipsPage() {
             openingId={openingId}
             onOpenPdf={openPdf}
             onDelete={confirmDelete}
+            onVerifySignature={(row) =>
+              openSigVerify(row.signature?.verificationCode ?? '')
+            }
+            onDownloadCertificate={(row) => {
+              if (row.signature?.id) {
+                void downloadSignatureCert(row.signature.id)
+              }
+            }}
           />
         ) : listLoading ? (
           <div className="payslips-table-shell">
@@ -596,6 +777,84 @@ export function PayslipsPage() {
           />
         )}
       </div>
+        </>
+      ) : null}
+
+      <Modal
+        title="Vérifier un accusé de réception"
+        open={sigVerifyOpen}
+        onCancel={closeSigVerify}
+        destroyOnHidden
+        footer={[
+          <Button key="close" onClick={closeSigVerify}>
+            Fermer
+          </Button>,
+          <Button
+            key="run"
+            type="primary"
+            loading={sigVerifyLoading}
+            onClick={() => void runSigVerify()}
+          >
+            Vérifier
+          </Button>,
+        ]}
+        width={520}
+      >
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+          Même contrôle que la page publique : le code est lié au bulletin signé
+          pour le mois indiqué dans le résultat.
+        </Typography.Paragraph>
+        <label className="payslips-verify-modal-label" htmlFor="rh-sig-code">
+          Code (12 caractères)
+        </label>
+        <Input
+          id="rh-sig-code"
+          placeholder="Ex. A1B2C3D4E5F6"
+          maxLength={14}
+          value={sigVerifyCode}
+          onChange={(e) =>
+            setSigVerifyCode(
+              e.target.value.toUpperCase().replace(/[^0-9A-F]/gi, ''),
+            )
+          }
+          onPressEnter={() => void runSigVerify()}
+          style={{ fontFamily: 'monospace', marginBottom: 16 }}
+        />
+        {sigVerifyResult?.valid === true && sigVerifyResult.details ? (
+          <div className="payslips-verify-modal-ok">
+            <div className="payslips-verify-modal-ok-head">
+              <CheckCircleOutlined className="payslips-verify-modal-ok-icon" />
+              <Tag color="success">Signature valide</Tag>
+            </div>
+            <dl className="payslips-verify-modal-dl">
+              <dt>Collaborateur</dt>
+              <dd>{sigVerifyResult.details.employeeName}</dd>
+              <dt>Matricule</dt>
+              <dd>{sigVerifyResult.details.employeeId || '—'}</dd>
+              <dt>Entreprise</dt>
+              <dd>{sigVerifyResult.details.companyName}</dd>
+              <dt>Période (mois de paie)</dt>
+              <dd>{sigVerifyResult.details.period}</dd>
+              <dt>Date de signature</dt>
+              <dd>
+                {new Date(sigVerifyResult.details.signedAt).toLocaleString(
+                  'fr-FR',
+                  { timeZone: 'Africa/Abidjan' },
+                )}
+              </dd>
+              <dt>Empreinte SHA-256</dt>
+              <dd className="payslips-verify-modal-hash">
+                {sigVerifyResult.details.fileHash}
+              </dd>
+            </dl>
+          </div>
+        ) : null}
+        {sigVerifyResult?.valid === false ? (
+          <div className="payslips-verify-modal-err" role="alert">
+            <CloseCircleOutlined /> Aucune signature enregistrée pour ce code.
+          </div>
+        ) : null}
+      </Modal>
     </div>
   )
 }

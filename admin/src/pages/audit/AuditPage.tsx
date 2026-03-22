@@ -31,6 +31,7 @@ const ACTION_LABELS: Record<string, string> = {
   DESACTIVE: 'Désactivation',
   REACTIVE: 'Réactivation',
   DELETE: 'Suppression',
+  SUPER_ADMIN_IMPERSONATE: 'Impersonation super admin',
 }
 
 function actionLabel(code: string): string {

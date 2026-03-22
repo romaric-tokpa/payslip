@@ -41,8 +41,10 @@ export async function registerAccount(body: {
   password: string
   firstName: string
   lastName: string
+  referentJobTitle: string
   companyName: string
-  companyRccm?: string
+  companyPhone: string
+  rccm?: string
 }): Promise<AuthSessionPayload> {
   const { data } = await api.post<AuthSessionPayload>('/auth/register', body)
   return data

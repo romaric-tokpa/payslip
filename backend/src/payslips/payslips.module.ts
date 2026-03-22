@@ -7,6 +7,7 @@ import { PayslipFileValidationPipe } from './pipes/payslip-file.pipe';
 import { PayslipBulkTempStore } from './payslip-bulk-temp.store';
 import { PayslipMatcherService } from './payslip-matcher.service';
 import { PayslipPdfExtractorService } from './payslip-pdf-extractor.service';
+import { PayslipSignatureService } from './payslip-signature.service';
 import { PayslipsController } from './payslips.controller';
 import { PayslipsService } from './payslips.service';
 
@@ -14,6 +15,7 @@ import { PayslipsService } from './payslips.service';
   imports: [PrismaModule, StorageModule, UsersModule, NotificationsModule],
   controllers: [PayslipsController],
   providers: [
+    PayslipSignatureService,
     PayslipsService,
     PayslipFileValidationPipe,
     PayslipPdfExtractorService,

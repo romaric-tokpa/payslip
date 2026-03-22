@@ -45,8 +45,15 @@ const userListSelect = {
   orgService: { select: { name: true } },
 } as const;
 
+const payslipListInclude = {
+  user: { select: userListSelect },
+  signature: {
+    select: { id: true, verificationCode: true, signedAt: true },
+  },
+} satisfies Prisma.PayslipInclude;
+
 export type PayslipWithUserList = Prisma.PayslipGetPayload<{
-  include: { user: { select: typeof userListSelect } };
+  include: typeof payslipListInclude;
 }>;
 
 /** Utilisateur embarqué côté API (pas de clé S3, URL présignée pour l’avatar). */
@@ -214,9 +221,7 @@ export class PayslipsService {
       where: { id: userId, companyId: adminUser.companyId! },
     });
     if (!target) {
-      throw new ForbiddenException(
-        'Utilisateur introuvable ou hors de votre entreprise',
-      );
+      throw new NotFoundException('Collaborateur introuvable');
     }
 
     if (target.role === 'EMPLOYEE') {
@@ -239,7 +244,12 @@ export class PayslipsService {
     }
 
     const existing = await this.prisma.payslip.findFirst({
-      where: { userId, periodMonth, periodYear },
+      where: {
+        userId,
+        periodMonth,
+        periodYear,
+        companyId: adminUser.companyId!,
+      },
       select: { id: true },
     });
     if (existing) {
@@ -282,7 +292,7 @@ export class PayslipsService {
           fileSize: file.size,
           uploadedById: adminUser.id,
         },
-        include: { user: { select: { ...userListSelect } } },
+        include: payslipListInclude,
       });
     } catch (e) {
       await this.storage.deleteFile(key).catch(() => undefined);
@@ -307,6 +317,7 @@ export class PayslipsService {
     await this.prisma.auditLog.create({
       data: {
         userId: adminUser.id,
+        companyId: adminUser.companyId!,
         action: PAYSLIP_AUDIT.UPLOADED,
         entityType: 'Payslip',
         entityId: created.id,
@@ -528,7 +539,7 @@ export class PayslipsService {
         }
 
         const target = await this.prisma.user.findFirst({
-          where: { id: a.userId, companyId: adminUser.companyId },
+          where: { id: a.userId, companyId: adminUser.companyId! },
           select: { employeeId: true },
         });
         if (!target) {
@@ -725,6 +736,7 @@ export class PayslipsService {
         throw new ForbiddenException('Compte sans entreprise associée');
       }
       where.companyId = actor.companyId;
+      where.user = { companyId: actor.companyId };
       if (query.userId) {
         where.userId = query.userId;
       }
@@ -743,7 +755,7 @@ export class PayslipsService {
       this.prisma.payslip.count({ where }),
       this.prisma.payslip.findMany({
         where,
-        include: { user: { select: { ...userListSelect } } },
+        include: payslipListInclude,
         orderBy: [{ periodYear: 'desc' }, { periodMonth: 'desc' }],
         skip: (page - 1) * limit,
         take: limit,
@@ -763,14 +775,25 @@ export class PayslipsService {
   }
 
   async findOne(id: string, actor: RequestUser): Promise<PayslipDetailClient> {
-    const payslip = await this.prisma.payslip.findUnique({
-      where: { id },
-      include: { user: { select: { ...userListSelect } } },
+    const scopedWhere: Prisma.PayslipWhereInput = { id };
+    if (actor.role === 'RH_ADMIN') {
+      if (!actor.companyId) {
+        throw new ForbiddenException('Compte sans entreprise associée');
+      }
+      scopedWhere.companyId = actor.companyId;
+    } else if (actor.role === 'EMPLOYEE') {
+      scopedWhere.userId = actor.id;
+    } else {
+      throw new ForbiddenException();
+    }
+
+    const payslip = await this.prisma.payslip.findFirst({
+      where: scopedWhere,
+      include: payslipListInclude,
     });
     if (!payslip) {
       throw new NotFoundException('Bulletin introuvable');
     }
-    this.assertPayslipAccess(payslip, actor);
     const presignedUrl = await this.storage.getPresignedUrl(payslip.fileUrl);
     const mapped = await this.attachProfilePhotoUrlToPayslip(payslip);
     return { ...mapped, presignedUrl };
@@ -786,18 +809,24 @@ export class PayslipsService {
     actor: RequestUser,
     client?: { ipAddress: string | null; userAgent: string | null },
   ): Promise<PayslipWithUserListClient> {
-    if (actor.role !== 'EMPLOYEE') {
+    const scopedWhere: Prisma.PayslipWhereInput = { id };
+    if (actor.role === 'EMPLOYEE') {
+      scopedWhere.userId = actor.id;
+    } else if (actor.role === 'RH_ADMIN') {
+      if (!actor.companyId) {
+        throw new ForbiddenException('Compte sans entreprise associée');
+      }
+      scopedWhere.companyId = actor.companyId;
+    } else {
       throw new ForbiddenException();
     }
-    const payslip = await this.prisma.payslip.findUnique({
-      where: { id },
-      include: { user: { select: { ...userListSelect } } },
+
+    const payslip = await this.prisma.payslip.findFirst({
+      where: scopedWhere,
+      include: payslipListInclude,
     });
     if (!payslip) {
       throw new NotFoundException('Bulletin introuvable');
-    }
-    if (payslip.userId !== actor.id) {
-      throw new ForbiddenException();
     }
 
     const wasUnread = !payslip.isRead;
@@ -806,13 +835,14 @@ export class PayslipsService {
     const updated = await this.prisma.payslip.update({
       where: { id },
       data: { isRead: true, readAt },
-      include: { user: { select: { ...userListSelect } } },
+      include: payslipListInclude,
     });
 
-    if (wasUnread) {
+    if (wasUnread && actor.role === 'EMPLOYEE') {
       await this.prisma.auditLog.create({
         data: {
           userId: actor.id,
+          companyId: payslip.companyId,
           action: PAYSLIP_AUDIT.READ,
           entityType: 'Payslip',
           entityId: id,
@@ -833,12 +863,11 @@ export class PayslipsService {
   async remove(id: string, actor: RequestUser): Promise<void> {
     this.assertRhAdminWithCompany(actor);
 
-    const payslip = await this.prisma.payslip.findUnique({ where: { id } });
+    const payslip = await this.prisma.payslip.findFirst({
+      where: { id, companyId: actor.companyId! },
+    });
     if (!payslip) {
       throw new NotFoundException('Bulletin introuvable');
-    }
-    if (payslip.companyId !== actor.companyId) {
-      throw new ForbiddenException();
     }
 
     await this.storage.deleteFile(payslip.fileUrl);
@@ -847,6 +876,7 @@ export class PayslipsService {
     await this.prisma.auditLog.create({
       data: {
         userId: actor.id,
+        companyId: actor.companyId!,
         action: PAYSLIP_AUDIT.DELETED,
         entityType: 'Payslip',
         entityId: id,
@@ -1026,22 +1056,4 @@ export class PayslipsService {
     }
   }
 
-  private assertPayslipAccess(
-    payslip: { companyId: string; userId: string },
-    actor: RequestUser,
-  ): void {
-    if (actor.role === 'RH_ADMIN') {
-      if (!actor.companyId || payslip.companyId !== actor.companyId) {
-        throw new ForbiddenException();
-      }
-      return;
-    }
-    if (actor.role === 'EMPLOYEE') {
-      if (payslip.userId !== actor.id) {
-        throw new ForbiddenException();
-      }
-      return;
-    }
-    throw new ForbiddenException();
-  }
 }

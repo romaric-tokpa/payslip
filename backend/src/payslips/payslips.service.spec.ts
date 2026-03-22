@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import type { RequestUser } from '../auth/auth.types';
@@ -171,6 +172,9 @@ describe('PayslipsService', () => {
         uploadedAt: new Date(),
         isRead: false,
         readAt: null,
+        isSigned: false,
+        signedAt: null,
+        signature: null,
         user: { ...userSummary },
       };
       prisma.payslip.create.mockResolvedValue(created);
@@ -212,11 +216,11 @@ describe('PayslipsService', () => {
       );
     });
 
-    it('utilisateur hors entreprise → ForbiddenException', async () => {
+    it('utilisateur hors entreprise → NotFoundException', async () => {
       prisma.user.findFirst.mockResolvedValue(null);
       await expect(
         service.uploadSingle(pdfFile('x.pdf'), 'other', 1, 2024, rh),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      ).rejects.toBeInstanceOf(NotFoundException);
       expect(storage.uploadFileWithRetry).not.toHaveBeenCalled();
     });
 
@@ -324,6 +328,9 @@ describe('PayslipsService', () => {
           uploadedAt: new Date(),
           isRead: false,
           readAt: null,
+          isSigned: false,
+          signedAt: null,
+          signature: null,
           user: { ...userSummary },
         },
       ]);
@@ -332,7 +339,10 @@ describe('PayslipsService', () => {
       expect(out.meta.total).toBe(1);
       expect(prisma.payslip.count).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ companyId: 'co-1' }),
+          where: expect.objectContaining({
+            companyId: 'co-1',
+            user: { companyId: 'co-1' },
+          }),
         }),
       );
     });
@@ -368,24 +378,27 @@ describe('PayslipsService', () => {
       uploadedAt: new Date(),
       isRead: false,
       readAt: null,
+      isSigned: false,
+      signedAt: null,
+      signature: null,
       user: { ...userSummary },
     };
 
     it('accès OK pour le titulaire', async () => {
-      prisma.payslip.findUnique.mockResolvedValue(slip);
+      prisma.payslip.findFirst.mockResolvedValue(slip);
       const out = await service.findOne('p1', employee);
       expect(out.presignedUrl).toBe('https://signed.example/pdf');
       expect(storage.getPresignedUrl).toHaveBeenCalledWith('s3-key');
     });
 
-    it('autre employé → ForbiddenException', async () => {
-      prisma.payslip.findUnique.mockResolvedValue(slip);
+    it('autre employé → NotFoundException', async () => {
+      prisma.payslip.findFirst.mockResolvedValue(null);
       await expect(
         service.findOne('p1', {
           ...employee,
           id: 'autre',
         }),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -403,9 +416,12 @@ describe('PayslipsService', () => {
         uploadedAt: new Date(),
         isRead: false,
         readAt: null,
+        isSigned: false,
+        signedAt: null,
+        signature: null,
         user: { ...userSummary },
       };
-      prisma.payslip.findUnique.mockResolvedValue(slip);
+      prisma.payslip.findFirst.mockResolvedValue(slip);
       prisma.payslip.update.mockResolvedValue({
         ...slip,
         isRead: true,
@@ -451,9 +467,12 @@ describe('PayslipsService', () => {
         uploadedAt: new Date(),
         isRead: true,
         readAt: new Date('2024-01-10'),
+        isSigned: false,
+        signedAt: null,
+        signature: null,
         user: { ...userSummary },
       };
-      prisma.payslip.findUnique.mockResolvedValue(slip);
+      prisma.payslip.findFirst.mockResolvedValue(slip);
       prisma.payslip.update.mockResolvedValue({
         ...slip,
         readAt: new Date(),
@@ -466,7 +485,7 @@ describe('PayslipsService', () => {
 
   describe('remove', () => {
     it('succès + audit PAYSLIP_DELETED', async () => {
-      prisma.payslip.findUnique.mockResolvedValue({
+      prisma.payslip.findFirst.mockResolvedValue({
         id: 'p-del',
         companyId: 'co-1',
         userId: 'u-target',

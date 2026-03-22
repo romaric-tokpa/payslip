@@ -1,13 +1,36 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsEmail,
+  IsNotEmpty,
   IsOptional,
   IsString,
-  MinLength,
   MaxLength,
+  MinLength,
 } from 'class-validator';
 
 export class RegisterDto {
+  @ApiProperty({ example: 'Awa' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  firstName: string;
+
+  @ApiProperty({ example: 'Diallo' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(120)
+  lastName: string;
+
+  @ApiProperty({
+    example: 'Responsable des ressources humaines',
+    description: 'Fonction du référent RH dans l’entreprise',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(160)
+  referentJobTitle: string;
+
   @ApiProperty({ example: 'rh@entreprise.com' })
   @IsEmail()
   email: string;
@@ -17,18 +40,9 @@ export class RegisterDto {
   @MinLength(8)
   password: string;
 
-  @ApiProperty({ example: 'Awa' })
-  @IsString()
-  @MaxLength(120)
-  firstName: string;
-
-  @ApiProperty({ example: 'Diallo' })
-  @IsString()
-  @MaxLength(120)
-  lastName: string;
-
   @ApiProperty({ example: 'Ma Société SARL' })
   @IsString()
+  @IsNotEmpty()
   @MaxLength(255)
   companyName: string;
 
@@ -39,5 +53,15 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   @MaxLength(64)
-  companyRccm?: string;
+  rccm?: string;
+
+  @ApiProperty({
+    description: 'Téléphone de l’entreprise',
+    example: '+225 07 12 34 56 78',
+  })
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(32)
+  companyPhone: string;
 }

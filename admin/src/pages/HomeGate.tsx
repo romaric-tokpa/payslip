@@ -1,13 +1,13 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { ADMIN_BASE } from '../constants/adminRoutes'
+import { ADMIN_BASE, SUPER_ADMIN_BASE } from '../constants/adminRoutes'
 import { LandingPage } from './landing/LandingPage'
 
 /**
  * `/` : landing si invité, redirection vers l’app admin si session valide.
  */
 export function HomeGate() {
-  const { isLoading, isAuthenticated } = useAuth()
+  const { isLoading, isAuthenticated, user } = useAuth()
 
   if (isLoading) {
     return (
@@ -25,7 +25,13 @@ export function HomeGate() {
     )
   }
 
-  if (isAuthenticated) {
+  if (isAuthenticated && user) {
+    if (user.mustChangePassword) {
+      return <Navigate to="/password-required" replace />
+    }
+    if (user.role === 'SUPER_ADMIN') {
+      return <Navigate to={SUPER_ADMIN_BASE} replace />
+    }
     return <Navigate to={ADMIN_BASE} replace />
   }
 

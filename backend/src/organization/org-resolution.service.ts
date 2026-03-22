@@ -643,6 +643,7 @@ export class OrgResolutionService {
       await tx.auditLog.create({
         data: {
           userId: actor.id,
+          companyId,
           action: ORG_AUDIT.BULK_CREATED,
           entityType: 'Company',
           entityId: companyId,

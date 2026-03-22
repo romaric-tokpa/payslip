@@ -259,3 +259,109 @@
 .payslips-by-month .payslips-month-table .ant-table-tbody > tr:last-child > td {
   border-bottom: none !important;
 }
+
+.payslip-main-tab-panel {
+  margin-bottom: 16px;
+}
+
+.payslip-sig-stat {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.payslip-sig-stat__icon {
+  font-size: 22px;
+  color: #0f5c5e;
+  margin-top: 2px;
+}
+
+.payslip-sig-stat__label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7f8c8d;
+}
+
+.payslip-sig-stat__value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1c2833;
+  margin-top: 2px;
+}
+
+.payslip-signatures-gauge {
+  text-align: center;
+}
+
+.payslip-signatures-gauge__label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7f8c8d;
+  margin-bottom: 8px;
+}
+
+.payslips-verify-modal-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #5a6c7d;
+  margin-bottom: 6px;
+}
+
+.payslips-verify-modal-ok {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+}
+
+.payslips-verify-modal-ok-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.payslips-verify-modal-ok-icon {
+  font-size: 20px;
+  color: #52c41a;
+}
+
+.payslips-verify-modal-dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 6px 12px;
+  font-size: 13px;
+}
+
+.payslips-verify-modal-dl dt {
+  margin: 0;
+  color: #7f8c8d;
+  font-weight: 600;
+}
+
+.payslips-verify-modal-dl dd {
+  margin: 0;
+  word-break: break-word;
+}
+
+.payslips-verify-modal-hash {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.payslips-verify-modal-err {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff2f0;
+  border: 1px solid #ffccc7;
+  color: #cf1322;
+  font-size: 13px;
+}

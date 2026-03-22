@@ -7,6 +7,11 @@ export type User = {
   lastName: string
   role: UserRole
   companyId: string | null
+  /** Présent après inscription (réponse register). */
+  companyName?: string | null
+  mustChangePassword?: boolean
+  /** JWT d’impersonation (debug client). */
+  impersonatedBy?: string
 }
 
 export type AuthSessionPayload = {

@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsOptional,
   IsString,
   MaxLength,
@@ -44,6 +45,23 @@ export class UpdateCompanyMeDto {
   rccm?: string;
 
   @ApiPropertyOptional({
+    description: 'Téléphone de l’entreprise. Chaîne vide pour effacer.',
+    example: '+225 07 12 34 56 78',
+  })
+  @IsOptional()
+  @Transform(({ value }) =>
+    value === undefined || value === null
+      ? undefined
+      : typeof value === 'string'
+        ? value.trim()
+        : undefined,
+  )
+  @ValidateIf((_, v) => v !== undefined)
+  @IsString()
+  @MaxLength(32)
+  phone?: string;
+
+  @ApiPropertyOptional({
     description: 'Adresse. Chaîne vide pour effacer.',
     example: 'Abidjan, Plateau…',
   })
@@ -59,4 +77,12 @@ export class UpdateCompanyMeDto {
   @IsString()
   @MaxLength(500)
   address?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Exiger l’accusé de réception électronique sur les bulletins (app mobile).',
+  })
+  @IsOptional()
+  @IsBoolean()
+  requireSignature?: boolean;
 }

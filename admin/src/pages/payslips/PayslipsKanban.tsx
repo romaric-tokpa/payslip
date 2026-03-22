@@ -1,6 +1,21 @@
-import { DeleteOutlined, EyeOutlined, MoreOutlined } from '@ant-design/icons'
+import {
+  DeleteOutlined,
+  DownloadOutlined,
+  EyeOutlined,
+  MoreOutlined,
+  SafetyCertificateOutlined,
+} from '@ant-design/icons'
 import type { MenuProps } from 'antd'
-import { Avatar, Button, Card, Dropdown, Empty, Spin, Tag } from 'antd'
+import {
+  Avatar,
+  Button,
+  Card,
+  Dropdown,
+  Empty,
+  Space,
+  Spin,
+  Tag,
+} from 'antd'
 import dayjs from 'dayjs'
 import type { Payslip } from '../../types/payslips'
 
@@ -16,6 +31,8 @@ export type PayslipsKanbanProps = {
   openingId: string | null
   onOpenPdf: (row: Payslip) => void
   onDelete: (row: Payslip) => void
+  onVerifySignature: (row: Payslip) => void
+  onDownloadCertificate: (row: Payslip) => void
 }
 
 function payslipUserInitials(u: Payslip['user']): string {
@@ -37,23 +54,40 @@ export function PayslipsKanban({
   openingId,
   onOpenPdf,
   onDelete,
+  onVerifySignature,
+  onDownloadCertificate,
 }: PayslipsKanbanProps) {
   function cardMenuItems(row: Payslip): MenuProps['items'] {
     const opening = openingId === row.id
-    return [
+    const items: MenuProps['items'] = [
       {
         key: 'open',
         label: opening ? 'Ouverture…' : 'Ouvrir le PDF',
         icon: <EyeOutlined />,
         disabled: opening,
       },
-      {
-        key: 'delete',
-        label: 'Supprimer',
-        icon: <DeleteOutlined />,
-        danger: true,
-      },
     ]
+    if (row.signature?.verificationCode) {
+      items.push({
+        key: 'verify_sig',
+        label: 'Vérifier l’accusé',
+        icon: <SafetyCertificateOutlined />,
+      })
+    }
+    if (row.signature?.id) {
+      items.push({
+        key: 'cert',
+        label: 'Certificat PDF',
+        icon: <DownloadOutlined />,
+      })
+    }
+    items.push({
+      key: 'delete',
+      label: 'Supprimer',
+      icon: <DeleteOutlined />,
+      danger: true,
+    })
+    return items
   }
 
   function onCardMenuClick(row: Payslip): MenuProps['onClick'] {
@@ -61,6 +95,10 @@ export function PayslipsKanban({
       domEvent.stopPropagation()
       if (key === 'open') {
         void onOpenPdf(row)
+      } else if (key === 'verify_sig') {
+        onVerifySignature(row)
+      } else if (key === 'cert') {
+        onDownloadCertificate(row)
       } else if (key === 'delete') {
         onDelete(row)
       }
@@ -133,11 +171,18 @@ export function PayslipsKanban({
                         {dayjs(row.uploadedAt).format('DD/MM/YYYY HH:mm')}
                       </div>
                       <div className="employees-kanban-card-meta">
-                        {row.isRead ? (
-                          <Tag color="success">Lu</Tag>
-                        ) : (
-                          <Tag>Non lu</Tag>
-                        )}
+                        <Space size={6} wrap>
+                          {row.isRead ? (
+                            <Tag color="success">Lu</Tag>
+                          ) : (
+                            <Tag>Non lu</Tag>
+                          )}
+                          {row.isSigned ? (
+                            <Tag color="processing">Accusé signé</Tag>
+                          ) : (
+                            <Tag>Non signé</Tag>
+                          )}
+                        </Space>
                       </div>
                     </div>
                     <Dropdown

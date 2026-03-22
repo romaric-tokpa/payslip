@@ -38,8 +38,14 @@ export class CompaniesService {
     if (dto.rccm !== undefined) {
       data.rccm = dto.rccm === '' ? null : dto.rccm;
     }
+    if (dto.phone !== undefined) {
+      data.phone = dto.phone === '' ? null : dto.phone;
+    }
     if (dto.address !== undefined) {
       data.address = dto.address === '' ? null : dto.address;
+    }
+    if (dto.requireSignature !== undefined) {
+      data.requireSignature = dto.requireSignature;
     }
 
     if (Object.keys(data).length === 0) {
@@ -54,6 +60,7 @@ export class CompaniesService {
     await this.prisma.auditLog.create({
       data: {
         userId: actor.id,
+        companyId: actor.companyId,
         action: COMPANY_AUDIT.LEGAL_INFO_UPDATED,
         entityType: 'Company',
         entityId: actor.companyId,

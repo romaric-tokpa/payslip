@@ -1,6 +1,7 @@
 import { App as AntdApp, ConfigProvider } from 'antd'
 import frFR from 'antd/locale/fr_FR'
 import { BrowserRouter } from 'react-router-dom'
+import { ImpersonationMessageListener } from './components/ImpersonationMessageListener'
 import { AuthProvider } from './contexts/AuthContext'
 import { RouterConfig } from './router'
 
@@ -29,6 +30,7 @@ export default function App() {
           }}
         >
           <AntdApp>
+            <ImpersonationMessageListener />
             <RouterConfig />
           </AntdApp>
         </ConfigProvider>

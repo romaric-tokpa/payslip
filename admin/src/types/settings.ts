@@ -4,7 +4,9 @@ export type SettingsCompanyBrief = {
   id: string
   name: string
   rccm: string | null
+  phone: string | null
   address: string | null
+  requireSignature: boolean
 }
 
 export type MeSettingsResponse = {

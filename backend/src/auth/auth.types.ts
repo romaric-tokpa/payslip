@@ -6,6 +6,8 @@ export type JwtAccessPayload = {
   email: string;
   role: UserRole;
   companyId?: string | null;
+  /** Id du SUPER_ADMIN ayant initié une impersonation (RH cible). */
+  impersonatedBy?: string;
 };
 
 /**
@@ -17,4 +19,5 @@ export type RequestUser = {
   email: string;
   role: UserRole;
   companyId: string | null;
+  impersonatedBy?: string;
 };

@@ -3,12 +3,14 @@ import {
   ConflictException,
   ForbiddenException,
   HttpException,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { User } from '@prisma/client';
+import { EmailService } from '../email/email.service';
 import { OrganizationService } from '../organization/organization.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
@@ -39,8 +41,10 @@ describe('AuthService', () => {
       delete: jest.Mock;
       deleteMany: jest.Mock;
     };
-    user: { update: jest.Mock; findUnique: jest.Mock };
+    user: { update: jest.Mock; findUnique: jest.Mock; findFirst: jest.Mock };
+    company: { findFirst: jest.Mock };
   };
+  let email: { sendWelcomeEmail: jest.Mock };
   let users: {
     findByEmail: jest.Mock;
     emailTaken: jest.Mock;
@@ -102,7 +106,16 @@ describe('AuthService', () => {
       user: {
         update: jest.fn().mockResolvedValue({}),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
       },
+      company: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findUnique: jest.fn().mockResolvedValue({ name: 'Entreprise test' }),
+      },
+    };
+
+    email = {
+      sendWelcomeEmail: jest.fn().mockResolvedValue(undefined),
     };
 
     users = {
@@ -141,6 +154,7 @@ describe('AuthService', () => {
             },
           },
         },
+        { provide: EmailService, useValue: email },
       ],
     }).compile();
 
@@ -155,15 +169,22 @@ describe('AuthService', () => {
   describe('register', () => {
     it('crée entreprise + utilisateur RH_ADMIN et retourne les tokens', async () => {
       users.emailTaken.mockResolvedValue(false);
+      prisma.company.findFirst.mockResolvedValue(null);
       const created = baseUser();
+      const userCreate = jest.fn().mockResolvedValue(created);
       prisma.$transaction.mockImplementation(
-        async (fn: (tx: unknown) => Promise<User>) => {
+        async (fn: (tx: unknown) => Promise<{ company: unknown; user: User }>) => {
           const tx = {
             company: {
-              create: jest.fn().mockResolvedValue({ id: 'co-1', name: 'Co' }),
+              create: jest
+                .fn()
+                .mockResolvedValue({ id: 'co-1', name: 'Ma boîte' }),
             },
             user: {
-              create: jest.fn().mockResolvedValue(created),
+              create: userCreate,
+            },
+            auditLog: {
+              create: jest.fn().mockResolvedValue({}),
             },
           };
           return fn(tx as never);
@@ -175,14 +196,17 @@ describe('AuthService', () => {
         password: 'password12',
         firstName: 'Awa',
         lastName: 'Diallo',
+        referentJobTitle: 'Responsable RH',
         companyName: 'Ma boîte',
-        companyRccm: 'CI-ABJ-2018-B-12345',
+        companyPhone: '+225 07 00 00 00 01',
+        rccm: 'CI-ABJ-2018-B-12345',
       };
 
       const result = await service.register(dto);
 
       expect(result.user.email).toBe('rh@entreprise.com');
       expect(result.user.role).toBe('RH_ADMIN');
+      expect(result.user.companyName).toBe('Ma boîte');
       expect(result.accessToken).toBe('signed.jwt.access');
       expect(result.refreshToken).toBeDefined();
       expect(prisma.session.create).toHaveBeenCalled();
@@ -206,6 +230,38 @@ describe('AuthService', () => {
       expect(signPayload.email).toBe('rh@entreprise.com');
       expect(signPayload.companyId).toBe('co-1');
       expect(signOpts.secret).toBe(jwtSecret);
+      expect(userCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          position: 'Responsable RH',
+          firstName: 'Awa',
+          lastName: 'Diallo',
+        }),
+      });
+      await Promise.resolve();
+      expect(email.sendWelcomeEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'rh@entreprise.com',
+          firstName: 'Awa',
+          companyName: 'Ma boîte',
+        }),
+      );
+    });
+
+    it('rejette si le nom d’entreprise existe déjà', async () => {
+      users.emailTaken.mockResolvedValue(false);
+      prisma.company.findFirst.mockResolvedValue({ id: 'existing-co' });
+      await expect(
+        service.register({
+          email: 'new@entreprise.com',
+          password: 'password12',
+          firstName: 'A',
+          lastName: 'B',
+          referentJobTitle: 'RH',
+          companyName: 'Doublon SA',
+          companyPhone: '+225 01',
+        }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('rejette si e-mail déjà utilisé', async () => {
@@ -216,7 +272,9 @@ describe('AuthService', () => {
           password: 'password12',
           firstName: 'A',
           lastName: 'B',
+          referentJobTitle: 'RH',
           companyName: 'C',
+          companyPhone: '+225 01',
         }),
       ).rejects.toBeInstanceOf(ConflictException);
       expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -534,7 +592,7 @@ describe('AuthService', () => {
     };
 
     it('émet un nouveau code et remplace les sessions INVITATION', async () => {
-      prisma.user.findUnique.mockResolvedValue(inactiveEmp);
+      prisma.user.findFirst.mockResolvedValue(inactiveEmp);
       prisma.session.findFirst.mockResolvedValue(null);
       const deleteMany = jest.fn().mockResolvedValue({ count: 1 });
       const sessionCreate = jest.fn().mockResolvedValue({});
@@ -574,7 +632,7 @@ describe('AuthService', () => {
     });
 
     it('rejette si compte déjà actif', async () => {
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         ...inactiveEmp,
         isActive: true,
       });
@@ -584,14 +642,11 @@ describe('AuthService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
-    it('rejette si autre entreprise', async () => {
-      prisma.user.findUnique.mockResolvedValue({
-        ...inactiveEmp,
-        companyId: 'co-2',
-      });
+    it('rejette si autre entreprise (introuvable dans le périmètre)', async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
       await expect(
         service.regenerateEmployeeInvitation(inactiveEmp.id, inviterRh),
-      ).rejects.toBeInstanceOf(ForbiddenException);
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 

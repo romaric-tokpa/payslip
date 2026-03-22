@@ -53,6 +53,8 @@ export function formatAuditDetail(row: AuditLog): string {
       return pp ? `Bulletin supprimé — ${pp}` : 'Bulletin supprimé'
     case 'COMPANY_LEGAL_INFO_UPDATED':
       return 'Informations légales de l’entreprise mises à jour'
+    case 'SUPER_ADMIN_IMPERSONATE':
+      return 'Connexion en tant qu’admin entreprise (impersonation)'
     default:
       return row.entityType
         ? `${row.action} (${row.entityType})`

@@ -27,7 +27,7 @@ export class CompaniesController {
   @ApiOperation({
     summary: 'Mettre à jour les informations légales de mon entreprise',
     description:
-      'Raison sociale, RCCM, adresse. Réservé aux comptes RH ou super admin rattachés à une entreprise (`companyId`).',
+      'Raison sociale, RCCM, téléphone, adresse. Réservé aux comptes RH ou super admin rattachés à une entreprise (`companyId`).',
   })
   @ApiOkResponse({ description: 'Profil utilisateur + entreprise à jour' })
   @ApiUnauthorizedResponse()

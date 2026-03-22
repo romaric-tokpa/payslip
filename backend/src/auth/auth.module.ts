@@ -10,6 +10,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { OrganizationModule } from '../organization/organization.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { UsersModule } from '../users/users.module';
+import { CompanyScopeGuard } from '../common/guards/company-scope.guard';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { MustChangePasswordGuard } from './guards/must-change-password.guard';
 import { RolesGuard } from './guards/roles.guard';
@@ -43,6 +44,7 @@ import { RolesGuard } from './guards/roles.guard';
     MustChangePasswordGuard,
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: MustChangePasswordGuard },
+    { provide: APP_GUARD, useClass: CompanyScopeGuard },
     // Optionnel : ajouter `{ provide: APP_GUARD, useClass: RolesGuard }` pour appliquer `@Roles()` sans `@UseGuards(RolesGuard)`.
   ],
   exports: [

@@ -1,4 +1,4 @@
-import { Alert, Button, Form, Input, Spin } from 'antd'
+import { Alert, Button, Form, Input, message, Spin } from 'antd'
 import { useCallback, useMemo, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { AuthFormField } from '../../components/AuthFormField'
@@ -11,12 +11,15 @@ import { getApiErrorMessage } from '../../utils/apiErrorMessage'
 import './auth.css'
 
 type RegisterFormValues = {
-  firstName: string
   lastName: string
+  firstName: string
+  referentJobTitle: string
   email: string
   companyName: string
-  companyRccm?: string
+  companyPhone: string
+  rccm?: string
   password: string
+  confirmPassword: string
 }
 
 function RegisterStepper() {
@@ -68,16 +71,21 @@ export function RegisterPage() {
       setError(null)
       setSubmitting(true)
       try {
-        const rccm = values.companyRccm?.trim()
+        const rccm = values.rccm?.trim()
         const payload = await authApi.registerAccount({
           email: values.email.trim(),
           password: values.password,
           firstName: values.firstName.trim(),
           lastName: values.lastName.trim(),
+          referentJobTitle: values.referentJobTitle.trim(),
           companyName: values.companyName.trim(),
-          ...(rccm ? { companyRccm: rccm } : {}),
+          companyPhone: values.companyPhone.trim(),
+          ...(rccm ? { rccm } : {}),
         })
         signInWithPayload(payload)
+        message.success(
+          `Bienvenue ${payload.user.firstName} ! Votre espace ${values.companyName.trim()} est prêt.`,
+        )
         navigate(ADMIN_BASE, { replace: true })
       } catch (e) {
         setError(getApiErrorMessage(e, "Inscription impossible"))
@@ -168,6 +176,18 @@ export function RegisterPage() {
         requiredMark={false}
         onFinish={(v) => void onFinish(v)}
       >
+        <p
+          style={{
+            margin: '0 0 10px',
+            fontSize: 12,
+            fontWeight: 600,
+            letterSpacing: '0.04em',
+            color: '#1C2833',
+            textTransform: 'uppercase',
+          }}
+        >
+          Référent de l’entreprise
+        </p>
         <div
           style={{
             display: 'grid',
@@ -176,22 +196,38 @@ export function RegisterPage() {
           }}
         >
           <AuthFormField
-            label="PRÉNOM"
-            name="firstName"
-            rules={[{ required: true, message: 'Prénom requis' }]}
-            style={{ marginBottom: 0 }}
-          >
-            <Input size="large" placeholder="Romaric" autoComplete="given-name" />
-          </AuthFormField>
-          <AuthFormField
             label="NOM"
             name="lastName"
+            requiredMark
             rules={[{ required: true, message: 'Nom requis' }]}
             style={{ marginBottom: 0 }}
           >
-            <Input size="large" placeholder="Tokpa" autoComplete="family-name" />
+            <Input size="large" placeholder="Koné" autoComplete="family-name" />
+          </AuthFormField>
+          <AuthFormField
+            label="PRÉNOM"
+            name="firstName"
+            requiredMark
+            rules={[{ required: true, message: 'Prénom requis' }]}
+            style={{ marginBottom: 0 }}
+          >
+            <Input size="large" placeholder="Aminata" autoComplete="given-name" />
           </AuthFormField>
         </div>
+
+        <AuthFormField
+          label="FONCTION"
+          name="referentJobTitle"
+          requiredMark
+          rules={[{ required: true, message: 'Fonction requise' }]}
+          style={{ marginTop: 12, marginBottom: 0 }}
+        >
+          <Input
+            size="large"
+            placeholder="Responsable RH, Directeur administratif…"
+            autoComplete="organization-title"
+          />
+        </AuthFormField>
 
         <AuthFormField
           label="E-MAIL PROFESSIONNEL"
@@ -220,6 +256,7 @@ export function RegisterPage() {
           <AuthFormField
             label="NOM DE L'ENTREPRISE"
             name="companyName"
+            requiredMark
             rules={[{ required: true, message: "Nom de l'entreprise requis" }]}
             style={{ marginBottom: 0 }}
           >
@@ -227,7 +264,7 @@ export function RegisterPage() {
           </AuthFormField>
           <AuthFormField
             label="RCCM"
-            name="companyRccm"
+            name="rccm"
             optional
             style={{ marginBottom: 0 }}
           >
@@ -236,8 +273,27 @@ export function RegisterPage() {
         </div>
 
         <AuthFormField
+          label="TÉLÉPHONE"
+          name="companyPhone"
+          requiredMark
+          rules={[
+            { required: true, message: 'Téléphone requis' },
+            { max: 32, message: 'Maximum 32 caractères' },
+          ]}
+          style={{ marginTop: 12, marginBottom: 0 }}
+        >
+          <Input
+            size="large"
+            placeholder="+225 07 00 00 00 00"
+            maxLength={32}
+            autoComplete="tel"
+          />
+        </AuthFormField>
+
+        <AuthFormField
           label="MOT DE PASSE"
           name="password"
+          requiredMark
           rules={[
             { required: true, message: 'Mot de passe requis' },
             { min: 8, message: 'Au moins 8 caractères' },
@@ -253,6 +309,33 @@ export function RegisterPage() {
         <div style={{ marginTop: 6 }}>
           <PasswordStrengthBar password={pwdForBar} />
         </div>
+
+        <AuthFormField
+          label="CONFIRMER LE MOT DE PASSE"
+          name="confirmPassword"
+          requiredMark
+          dependencies={['password']}
+          rules={[
+            { required: true, message: 'Confirmation requise' },
+            ({ getFieldValue }) => ({
+              validator(_: unknown, value: string) {
+                if (!value || getFieldValue('password') === value) {
+                  return Promise.resolve()
+                }
+                return Promise.reject(
+                  new Error('Les mots de passe ne correspondent pas'),
+                )
+              },
+            }),
+          ]}
+          style={{ marginTop: 12, marginBottom: 0 }}
+        >
+          <Input.Password
+            size="large"
+            placeholder="Saisissez à nouveau le mot de passe"
+            autoComplete="new-password"
+          />
+        </AuthFormField>
 
         {error ? (
           <Alert

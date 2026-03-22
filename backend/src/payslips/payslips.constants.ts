@@ -3,6 +3,12 @@ export const PAYSLIP_AUDIT = {
   DELETED: 'PAYSLIP_DELETED',
   /** Première prise en compte du bulletin par le titulaire (PATCH …/read). */
   READ: 'PAYSLIP_READ',
+  /** Accusé de réception électronique (POST …/sign). */
+  SIGNED: 'PAYSLIP_SIGNED',
+} as const;
+
+export const PAYSLIP_SIGNATURE_AUDIT = {
+  REMINDER_SENT: 'SIGNATURE_REMINDER_SENT',
 } as const;
 
 /** Messages stables pour le rapport bulk (mapping côté confirm). */

@@ -1,4 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
+import {
+  DashboardChartsDto,
+  DashboardCurrentMonthDto,
+  DashboardKpiDto,
+  DashboardTrendsDto,
+  ExpiringContractRowDto,
+  RecentPayslipRowDto,
+  UnreadEmployeeMonthRowDto,
+} from './enhanced-dashboard.dto';
 
 export class MonthlyUploadStatDto {
   @ApiProperty({ example: 3 })
@@ -41,6 +50,12 @@ export class DashboardStatsResponseDto {
   @ApiProperty()
   activeEmployees: number;
 
+  @ApiProperty({ description: 'Nombre de départements' })
+  totalDepartments: number;
+
+  @ApiProperty({ description: 'Nombre total de bulletins enregistrés' })
+  totalPayslips: number;
+
   @ApiProperty({
     description: 'Nouveaux comptes collaborateurs créés ce mois (UTC)',
   })
@@ -72,4 +87,52 @@ export class DashboardStatsResponseDto {
 
   @ApiProperty({ type: [TopUnreadRowDto] })
   topUnread: TopUnreadRowDto[];
+
+  @ApiProperty({
+    description: 'Signature électronique exigée pour les bulletins',
+  })
+  requireSignature: boolean;
+
+  @ApiProperty({
+    nullable: true,
+    description:
+      'Taux de signature (%) sur la période de paie du mois civil courant, si option activée et bulletins présents',
+  })
+  signatureRateCurrentMonth: number | null;
+
+  @ApiProperty({ description: 'Mois de paie (1–12) pour les compteurs signature' })
+  signaturePeriodMonth: number;
+
+  @ApiProperty()
+  signaturePeriodYear: number;
+
+  @ApiProperty({ description: 'Bulletins signés sur cette période' })
+  signaturePeriodSigned: number;
+
+  @ApiProperty({ description: 'Bulletins total sur cette période' })
+  signaturePeriodTotal: number;
+
+  @ApiProperty()
+  departedThisMonth: number;
+
+  @ApiProperty({ type: [ExpiringContractRowDto] })
+  expiringContracts: ExpiringContractRowDto[];
+
+  @ApiProperty({ type: DashboardKpiDto })
+  kpi: DashboardKpiDto;
+
+  @ApiProperty({ type: DashboardCurrentMonthDto })
+  currentMonth: DashboardCurrentMonthDto;
+
+  @ApiProperty({ type: DashboardTrendsDto })
+  trends: DashboardTrendsDto;
+
+  @ApiProperty({ type: DashboardChartsDto })
+  charts: DashboardChartsDto;
+
+  @ApiProperty({ type: [UnreadEmployeeMonthRowDto] })
+  unreadEmployeesThisMonth: UnreadEmployeeMonthRowDto[];
+
+  @ApiProperty({ type: [RecentPayslipRowDto] })
+  recentPayslips: RecentPayslipRowDto[];
 }

@@ -116,12 +116,14 @@ export function SettingsPage() {
   const [companyForm] = Form.useForm<{
     name: string
     rccm: string
+    phone: string
     address: string
   }>()
   const [profileForm] = Form.useForm<{
     firstName: string
     lastName: string
     email: string
+    position: string
   }>()
   const [passwordForm] = Form.useForm<{
     currentPassword: string
@@ -130,6 +132,7 @@ export function SettingsPage() {
   }>()
 
   const [savingCompany, setSavingCompany] = useState(false)
+  const [savingRequireSignature, setSavingRequireSignature] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
   const [changingPassword, setChangingPassword] = useState(false)
 
@@ -166,18 +169,43 @@ export function SettingsPage() {
     (me?.user.role === 'RH_ADMIN' || me?.user.role === 'SUPER_ADMIN') &&
     me?.company != null
 
+  const onToggleRequireSignature = useCallback(
+    async (requireSignature: boolean) => {
+      if (!me?.company) {
+        return
+      }
+      setSavingRequireSignature(true)
+      try {
+        const data = await settingsApi.updateMyCompany({ requireSignature })
+        setMe(data)
+        setSessionUser(settingsApi.meUserToSessionUser(data.user, data.company))
+        message.success(
+          requireSignature
+            ? 'La signature des bulletins est désormais exigée.'
+            : 'La signature des bulletins est facultative.',
+        )
+      } catch (e) {
+        message.error(getApiErrorMessage(e, 'Enregistrement impossible'))
+      } finally {
+        setSavingRequireSignature(false)
+      }
+    },
+    [me?.company, message, setSessionUser],
+  )
+
   const loadMe = useCallback(async () => {
     setLoadingMe(true)
     try {
       const data = await settingsApi.getMe()
       setMe(data)
+      setSessionUser(settingsApi.meUserToSessionUser(data.user, data.company))
     } catch (e) {
       message.error(getApiErrorMessage(e, 'Une erreur est survenue'))
       setMe(null)
     } finally {
       setLoadingMe(false)
     }
-  }, [message])
+  }, [message, setSessionUser])
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true)
@@ -204,6 +232,7 @@ export function SettingsPage() {
     companyForm.setFieldsValue({
       name: me.company.name,
       rccm: me.company.rccm ?? '',
+      phone: me.company.phone ?? '',
       address: me.company.address ?? '',
     })
   }, [companyModalOpen, me, companyForm])
@@ -214,6 +243,7 @@ export function SettingsPage() {
       firstName: me.user.firstName,
       lastName: me.user.lastName,
       email: me.user.email,
+      position: me.user.position ?? '',
     })
   }, [profileModalOpen, me, profileForm])
 
@@ -439,9 +469,11 @@ export function SettingsPage() {
       const data = await settingsApi.updateMyCompany({
         name: values.name?.trim(),
         rccm: values.rccm?.trim() ?? '',
+        phone: values.phone?.trim() ?? '',
         address: values.address?.trim() ?? '',
       })
       setMe(data)
+      setSessionUser(settingsApi.meUserToSessionUser(data.user, data.company))
       message.success('Entreprise mise à jour')
       setCompanyModalOpen(false)
     } catch (e) {
@@ -462,9 +494,10 @@ export function SettingsPage() {
         firstName: values.firstName?.trim(),
         lastName: values.lastName?.trim(),
         email: values.email?.trim(),
+        position: values.position?.trim() ?? '',
       })
       setMe(data)
-      setSessionUser(settingsApi.meUserToSessionUser(data.user))
+      setSessionUser(settingsApi.meUserToSessionUser(data.user, data.company))
       message.success('Profil mis à jour')
       setProfileModalOpen(false)
     } catch (e) {
@@ -577,6 +610,16 @@ export function SettingsPage() {
                   </div>
                 </div>
                 <div>
+                  <div className="settings-field-label">Téléphone</div>
+                  <div
+                    className={`settings-field-value${me.company.phone?.trim() ? '' : ' settings-field-value--empty'}`}
+                  >
+                    {me.company.phone?.trim()
+                      ? me.company.phone
+                      : 'Non renseigné'}
+                  </div>
+                </div>
+                <div>
                   <div className="settings-field-label">Adresse</div>
                   <div
                     className={`settings-field-value${me.company.address?.trim() ? '' : ' settings-field-value--empty'}`}
@@ -586,6 +629,34 @@ export function SettingsPage() {
                       : 'Non renseignée'}
                   </div>
                 </div>
+                {canEditCompany ? (
+                  <div
+                    className="settings-sec-row"
+                    style={{
+                      marginTop: 12,
+                      borderTop: '1px solid rgba(28, 40, 51, 0.08)',
+                      paddingTop: 8,
+                    }}
+                  >
+                    <div className="settings-sec-row__inner">
+                      <div>
+                        <div className="settings-sec-row__title">
+                          Signature électronique
+                        </div>
+                        <div className="settings-sec-row__hint">
+                          Si activé, les collaborateurs verront un bouton « Accuser
+                          réception » sur chaque bulletin. Le taux de signature est
+                          suivi dans le tableau de bord.
+                        </div>
+                      </div>
+                      <Switch
+                        checked={me.company.requireSignature ?? false}
+                        loading={savingRequireSignature}
+                        onChange={(v) => void onToggleRequireSignature(v)}
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </>
             ) : (
               <div className="settings-field-value settings-field-value--empty">
@@ -617,9 +688,25 @@ export function SettingsPage() {
             {displayUser ? (
               <>
                 <div>
-                  <div className="settings-field-label">Nom complet</div>
+                  <div className="settings-field-label">Prénom</div>
                   <div className="settings-field-value">
-                    {displayUser.firstName} {displayUser.lastName}
+                    {displayUser.firstName}
+                  </div>
+                </div>
+                <div>
+                  <div className="settings-field-label">Nom</div>
+                  <div className="settings-field-value">
+                    {displayUser.lastName}
+                  </div>
+                </div>
+                <div>
+                  <div className="settings-field-label">Fonction</div>
+                  <div
+                    className={`settings-field-value${displayUser.position?.trim() ? '' : ' settings-field-value--empty'}`}
+                  >
+                    {displayUser.position?.trim()
+                      ? displayUser.position
+                      : 'Non renseignée'}
                   </div>
                 </div>
                 <div>
@@ -835,10 +922,17 @@ export function SettingsPage() {
             label="Raison sociale"
             rules={[{ required: true, message: 'Requis' }]}
           >
-            <Input />
+            <Input placeholder="Nom de l’entreprise" />
           </Form.Item>
           <Form.Item name="rccm" label="RCCM">
-            <Input allowClear />
+            <Input allowClear placeholder="CI-ABJ-…" />
+          </Form.Item>
+          <Form.Item
+            name="phone"
+            label="Téléphone"
+            rules={[{ max: 32, message: 'Maximum 32 caractères' }]}
+          >
+            <Input allowClear placeholder="+225 07 …" maxLength={32} />
           </Form.Item>
           <Form.Item name="address" label="Adresse">
             <Input.TextArea rows={3} allowClear />
@@ -888,6 +982,13 @@ export function SettingsPage() {
             ]}
           >
             <Input autoComplete="email" />
+          </Form.Item>
+          <Form.Item
+            name="position"
+            label="Fonction"
+            rules={[{ max: 120, message: 'Maximum 120 caractères' }]}
+          >
+            <Input allowClear placeholder="Responsable RH, …" maxLength={120} />
           </Form.Item>
           <Space>
             <Button onClick={() => setProfileModalOpen(false)}>Annuler</Button>

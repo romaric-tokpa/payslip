@@ -282,7 +282,7 @@ export function EmployeeTable({
         }
         items.push({
           key: 'payslips',
-          label: 'Voir les bulletins',
+          label: 'Bulletins et signatures (par mois)',
           icon: <FileProtectOutlined />,
         })
         items.push({
@@ -298,7 +298,7 @@ export function EmployeeTable({
         items.push({ key: 'reactivate', label: 'Réactiver' })
         items.push({
           key: 'payslips',
-          label: 'Voir les bulletins',
+          label: 'Bulletins et signatures (par mois)',
           icon: <FileProtectOutlined />,
         })
       } else if (s === 'DEPARTED') {
@@ -307,7 +307,7 @@ export function EmployeeTable({
         }
         items.push({
           key: 'payslips',
-          label: 'Voir les bulletins',
+          label: 'Bulletins et signatures (par mois)',
           icon: <FileProtectOutlined />,
         })
         items.push({ key: 'edit', label: 'Modifier' })

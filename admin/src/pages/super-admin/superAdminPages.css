@@ -1,0 +1,86 @@
+.sa-page-title {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: #1c2833;
+  letter-spacing: -0.02em;
+}
+
+.sa-page-lead {
+  margin: 0 0 24px;
+  color: #5c6b7a;
+  max-width: 720px;
+  line-height: 1.5;
+}
+
+.sa-kpi-row {
+  margin-bottom: 24px;
+}
+
+.sa-kpi-card .ant-card-body {
+  padding: 18px 20px;
+}
+
+.sa-kpi-label {
+  font-size: 13px;
+  color: #7f8c8d;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.sa-kpi-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1c2833;
+  line-height: 1.1;
+}
+
+.sa-kpi-sub {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.sa-kpi-sub--up {
+  color: #1d8348;
+  font-weight: 600;
+}
+
+.sa-section-card .ant-card-head-title {
+  font-weight: 700;
+}
+
+/* Col + Card flex : permet au graphique de ne pas rester à largeur 0. */
+.sa-section-card .ant-card-body {
+  min-width: 0;
+}
+
+/* Recharts : évite width/height -1 (flex / Col Ant sans min-width). */
+.sa-recharts-box {
+  width: 100%;
+  min-width: 0;
+  height: 300px;
+}
+
+.sa-recharts-box--320 {
+  height: 320px;
+}
+
+.sa-signature-strip {
+  display: grid;
+  grid-template-columns: repeat(1, 1fr);
+  gap: 16px;
+}
+
+@media (min-width: 576px) {
+  .sa-signature-strip {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.sa-signature-metric {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #fafbfc;
+  border: 1px solid #f0f0f0;
+}

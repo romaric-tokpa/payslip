@@ -1,5 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+export class PayslipSignatureSummaryDto {
+  @ApiProperty({ description: 'Identifiant de la ligne signature (certificat PDF)' })
+  id: string;
+
+  @ApiProperty()
+  verificationCode: string;
+
+  @ApiProperty()
+  signedAt: Date;
+}
+
 export class PayslipUserSummaryDto {
   @ApiProperty()
   firstName: string;
@@ -53,6 +64,19 @@ export class PayslipResponseDto {
 
   @ApiPropertyOptional({ nullable: true })
   readAt: Date | null;
+
+  @ApiProperty()
+  isSigned: boolean;
+
+  @ApiPropertyOptional({ nullable: true })
+  signedAt: Date | null;
+
+  @ApiPropertyOptional({
+    type: PayslipSignatureSummaryDto,
+    nullable: true,
+    description: 'Présent si une signature existe',
+  })
+  signature?: PayslipSignatureSummaryDto | null;
 
   @ApiProperty({ type: PayslipUserSummaryDto })
   user: PayslipUserSummaryDto;

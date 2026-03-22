@@ -9,6 +9,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import type { Readable } from 'node:stream';
 
 function forcePathStyleForEndpoint(endpoint: string): boolean {
   const ep = endpoint.toLowerCase();
@@ -165,6 +166,23 @@ export class StorageService implements OnModuleInit {
         Key: key,
       }),
     );
+  }
+
+  /** Télécharge l’objet S3 en mémoire (ex. hash SHA-256 du PDF bulletin). */
+  async getFileBuffer(key: string): Promise<Buffer> {
+    const response = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    const body = response.Body;
+    if (body == null) {
+      throw new Error('Corps de réponse S3 vide');
+    }
+    const stream = body as Readable;
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
   }
 
   /** Vérifie que le bucket S3/MinIO est joignable (health check). */

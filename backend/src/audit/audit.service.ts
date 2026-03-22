@@ -203,6 +203,8 @@ export class AuditService {
           : 'Bulletin supprimé';
       case 'COMPANY_LEGAL_INFO_UPDATED':
         return 'Informations légales de l’entreprise mises à jour';
+      case 'COMPANY_REGISTERED':
+        return 'Inscription entreprise et compte administrateur créés';
       default:
         return row.entityType
           ? `${row.action} (${row.entityType})`
@@ -246,7 +248,15 @@ export class AuditService {
         throw new ForbiddenException('Compte sans entreprise associée');
       }
       and.push({
-        user: { companyId: actor.companyId },
+        OR: [
+          { companyId: actor.companyId },
+          {
+            AND: [
+              { companyId: null },
+              { user: { companyId: actor.companyId } },
+            ],
+          },
+        ],
       });
     }
 

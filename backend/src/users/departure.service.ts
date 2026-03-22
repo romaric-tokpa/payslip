@@ -95,6 +95,7 @@ export class DepartureService {
       await tx.auditLog.create({
         data: {
           userId: adminId,
+          companyId,
           action: 'USER_DEPARTED',
           entityType: 'USER',
           entityId: userId,
@@ -185,6 +186,7 @@ export class DepartureService {
     await this.prisma.auditLog.create({
       data: {
         userId: adminId,
+        companyId,
         action: 'BULK_DEPARTURE',
         entityType: 'USER',
         entityId: companyId,
@@ -244,6 +246,7 @@ export class DepartureService {
       await tx.auditLog.create({
         data: {
           userId: adminId,
+          companyId,
           action: 'USER_REINSTATED',
           entityType: 'USER',
           entityId: userId,
@@ -289,6 +292,7 @@ export class DepartureService {
       await tx.auditLog.create({
         data: {
           userId: adminId,
+          companyId,
           action: 'USER_ARCHIVED',
           entityType: 'USER',
           entityId: userId,

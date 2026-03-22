@@ -18,6 +18,7 @@ import * as bcrypt from 'bcrypt';
 import type { SignOptions } from 'jsonwebtoken';
 import { EmploymentStatus, Prisma, User, UserRole } from '@prisma/client';
 import type { ContractType } from '@prisma/client';
+import { EmailService } from '../email/email.service';
 import { OrganizationService } from '../organization/organization.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
@@ -41,6 +42,8 @@ export type AuthUserView = {
   lastName: string;
   role: UserRole;
   companyId: string | null;
+  /** Renseigné après inscription (auto-login). */
+  companyName?: string | null;
   mustChangePassword: boolean;
   employmentStatus: EmploymentStatus;
   readOnlyUntil: string | null;
@@ -81,6 +84,7 @@ export class AuthService {
     private readonly organization: OrganizationService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly email: EmailService,
   ) {
     this.accessExpires = this.config.get<string>('JWT_ACCESS_EXPIRES', '15m');
     this.refreshDays = Number(this.config.get<string>('JWT_REFRESH_DAYS', '7'));
@@ -100,31 +104,67 @@ export class AuthService {
   async register(
     dto: RegisterDto,
   ): Promise<{ user: AuthUserView } & TokenPair> {
-    const email = dto.email.toLowerCase();
+    const email = dto.email.toLowerCase().trim();
     if (await this.users.emailTaken(email)) {
-      throw new ConflictException('Cet e-mail est déjà utilisé');
+      throw new ConflictException('Un compte avec cet e-mail existe déjà');
     }
-    const passwordHash = await this.hashPassword(dto.password);
 
-    const user = await this.prisma.$transaction(async (tx) => {
-      const company = await tx.company.create({
+    const companyNameTrim = dto.companyName.trim();
+    const existingCompany = await this.prisma.company.findFirst({
+      where: {
+        name: { equals: companyNameTrim, mode: 'insensitive' },
+      },
+      select: { id: true },
+    });
+    if (existingCompany) {
+      throw new ConflictException(
+        'Une entreprise avec ce nom existe déjà. Contactez votre administrateur si vous souhaitez rejoindre cette entreprise.',
+      );
+    }
+
+    const passwordHash = await this.hashPassword(dto.password);
+    const rccm = dto.rccm?.trim() || null;
+    const phone = dto.companyPhone.trim();
+
+    const { company, user } = await this.prisma.$transaction(async (tx) => {
+      const co = await tx.company.create({
         data: {
-          name: dto.companyName,
-          rccm: dto.companyRccm ?? null,
+          name: companyNameTrim,
+          rccm,
+          phone,
+          readOnlyDaysAfterDeparture: 90,
         },
       });
-      return tx.user.create({
+      const u = await tx.user.create({
         data: {
           email,
           passwordHash,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
+          firstName: dto.firstName.trim(),
+          lastName: dto.lastName.trim(),
+          position: dto.referentJobTitle.trim(),
           role: 'RH_ADMIN',
-          companyId: company.id,
+          companyId: co.id,
           employeeId: null,
           employmentStatus: 'ACTIVE',
+          isActive: true,
+          mustChangePassword: false,
         },
       });
+      await tx.auditLog.create({
+        data: {
+          userId: u.id,
+          companyId: co.id,
+          action: AUDIT.COMPANY_REGISTERED,
+          entityType: 'Company',
+          entityId: co.id,
+          metadata: {
+            companyName: co.name,
+            adminEmail: u.email,
+            referentJobTitle: u.position,
+          } as Prisma.InputJsonValue,
+        },
+      });
+      return { company: co, user: u };
     });
 
     const tokens = await this.generateTokens(
@@ -135,8 +175,24 @@ export class AuthService {
     );
     await this.persistRefreshSession(user.id, tokens.refreshToken);
 
+    void this.email
+      .sendWelcomeEmail({
+        to: user.email,
+        firstName: user.firstName,
+        companyName: company.name,
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.warn(
+          `E-mail de bienvenue échoué pour ${user.email}: ${msg}`,
+        );
+      });
+
     return {
-      user: this.toAuthUserView(user),
+      user: {
+        ...this.toAuthUserView(user),
+        companyName: company.name,
+      },
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
     };
@@ -201,6 +257,7 @@ export class AuthService {
     await this.prisma.auditLog.create({
       data: {
         userId: user.id,
+        companyId: user.companyId ?? undefined,
         action: AUDIT.LOGIN_SUCCESS,
         entityType: 'User',
         entityId: user.id,
@@ -215,8 +272,18 @@ export class AuthService {
     );
     await this.persistRefreshSession(user.id, tokens.refreshToken);
 
+    const userView = this.toAuthUserView(user);
+    let companyName: string | null | undefined = userView.companyName;
+    if (user.companyId) {
+      const co = await this.prisma.company.findUnique({
+        where: { id: user.companyId },
+        select: { name: true },
+      });
+      companyName = co?.name ?? null;
+    }
+
     return {
-      user: this.toAuthUserView(user),
+      user: { ...userView, companyName },
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
     };
@@ -299,6 +366,7 @@ export class AuthService {
     await this.prisma.auditLog.create({
       data: {
         userId: user.id,
+        companyId: user.companyId ?? undefined,
         action: AUDIT.LOGIN_SUCCESS,
         entityType: 'User',
         entityId: user.id,
@@ -401,16 +469,93 @@ export class AuthService {
     role: UserRole,
     email: string,
     companyId: string | null,
+    opts?: {
+      impersonatedBy?: string;
+      accessExpiresIn?: SignOptions['expiresIn'];
+    },
   ): Promise<TokenPair> {
-    const accessToken = await this.jwt.signAsync(
-      { sub: userId, role, email, companyId },
-      {
-        secret: this.config.getOrThrow<string>('JWT_SECRET'),
-        expiresIn: this.accessExpires as SignOptions['expiresIn'],
-      },
-    );
+    const payload: Record<string, unknown> = {
+      sub: userId,
+      role,
+      email,
+      companyId,
+    };
+    if (opts?.impersonatedBy) {
+      payload.impersonatedBy = opts.impersonatedBy;
+    }
+    const accessToken = await this.jwt.signAsync(payload, {
+      secret: this.config.getOrThrow<string>('JWT_SECRET'),
+      expiresIn:
+        opts?.accessExpiresIn ?? (this.accessExpires as SignOptions['expiresIn']),
+    });
     const refreshToken = newRefreshToken();
     return { accessToken, refreshToken };
+  }
+
+  /**
+   * Jetons de session pour le compte RH_ADMIN principal d’une entreprise,
+   * avec revendication JWT `impersonatedBy` (audit SUPER_ADMIN_IMPERSONATE).
+   */
+  async impersonateCompanyRh(
+    actor: RequestUser,
+    companyId: string,
+  ): Promise<{ user: AuthUserView } & TokenPair> {
+    if (actor.role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException();
+    }
+
+    const admin = await this.prisma.user.findFirst({
+      where: {
+        companyId,
+        role: 'RH_ADMIN',
+        isActive: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (!admin) {
+      throw new NotFoundException(
+        'Aucun administrateur RH actif pour cette entreprise',
+      );
+    }
+
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { name: true },
+    });
+
+    const tokens = await this.generateTokens(
+      admin.id,
+      admin.role,
+      admin.email,
+      admin.companyId,
+      { impersonatedBy: actor.id, accessExpiresIn: '1h' },
+    );
+    await this.persistRefreshSession(admin.id, tokens.refreshToken);
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId: actor.id,
+        companyId,
+        action: AUDIT.SUPER_ADMIN_IMPERSONATE,
+        entityType: 'User',
+        entityId: admin.id,
+        metadata: {
+          targetEmail: admin.email,
+          targetCompanyId: companyId,
+          impersonatedUserId: admin.id,
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    return {
+      user: {
+        ...this.toAuthUserView(admin),
+        companyName: company?.name ?? null,
+      },
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    };
   }
 
   private refreshPepper(): string {
@@ -698,14 +843,11 @@ export class AuthService {
       );
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { id: employeeUserId },
+    const user = await this.prisma.user.findFirst({
+      where: { id: employeeUserId, companyId: inviter.companyId },
     });
     if (!user) {
       throw new NotFoundException('Utilisateur introuvable');
-    }
-    if (user.companyId !== inviter.companyId) {
-      throw new ForbiddenException();
     }
     if (user.role !== 'EMPLOYEE') {
       throw new BadRequestException(
@@ -930,6 +1072,7 @@ export class AuthService {
     await this.prisma.auditLog.create({
       data: {
         userId: actor.id,
+        companyId: actor.companyId ?? undefined,
         action: AUDIT.PASSWORD_CHANGED,
         entityType: 'User',
         entityId: actor.id,
@@ -1015,6 +1158,7 @@ export class AuthService {
     await this.prisma.auditLog.create({
       data: {
         userId: user.id,
+        companyId: user.companyId ?? undefined,
         action: AUDIT.LOGIN_FAILED,
         entityType: 'User',
         entityId: user.id,

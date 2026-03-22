@@ -1,6 +1,7 @@
 import { api } from './api'
+import type { User } from '../types/auth'
 import type { EmployeeUser } from '../types/employees'
-import type { MeSettingsResponse } from '../types/settings'
+import type { MeSettingsResponse, SettingsCompanyBrief } from '../types/settings'
 
 export async function getMe(): Promise<MeSettingsResponse> {
   const { data } = await api.get<MeSettingsResponse>('/users/me')
@@ -25,7 +26,9 @@ export async function updateMe(
 export type UpdateCompanyPayload = {
   name?: string
   rccm?: string
+  phone?: string
   address?: string
+  requireSignature?: boolean
 }
 
 export async function updateMyCompany(
@@ -36,14 +39,10 @@ export async function updateMyCompany(
 }
 
 /** Réduit le profil API vers l’objet stocké en session (JWT claims / menu). */
-export function meUserToSessionUser(u: EmployeeUser): {
-  id: string
-  email: string
-  firstName: string
-  lastName: string
-  role: EmployeeUser['role']
-  companyId: string | null
-} {
+export function meUserToSessionUser(
+  u: EmployeeUser,
+  company?: SettingsCompanyBrief | null,
+): User {
   return {
     id: u.id,
     email: u.email,
@@ -51,5 +50,6 @@ export function meUserToSessionUser(u: EmployeeUser): {
     lastName: u.lastName,
     role: u.role,
     companyId: u.companyId,
+    companyName: company?.name,
   }
 }
